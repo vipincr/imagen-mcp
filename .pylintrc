@@ -1,0 +1,24 @@
+[MASTER]
+ignore=.venv,build,dist,.git,__pycache__,test_output
+jobs=0
+py-version=3.11
+
+[FORMAT]
+max-line-length=120
+
+[MESSAGES CONTROL]
+# Keep the message set strict; do not blanket-disable core rules.
+disable=
+
+[REPORTS]
+output-format=colorized
+score=no
+
+[BASIC]
+good-names=i,j,k,q,ex,im,id,ts
+
+[TYPECHECK]
+ignored-modules=pillow_heif
+
+[DESIGN]
+max-args=10

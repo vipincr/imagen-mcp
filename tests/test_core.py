@@ -1,23 +1,27 @@
+"""Unit tests for core image generation utilities."""
+# pylint: disable=missing-function-docstring
+
 import base64
 import os
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-import image_generator.core as core
+from image_generator import core
 
 
 class ModelFallbackTests(unittest.TestCase):
+    """Validate model selection fallback order."""
     def setUp(self):
         # Clear env for each test and reset model state
         self.env_patch = patch.dict(os.environ, {}, clear=True)
         self.env_patch.start()
-        core._state._model_id = None  # type: ignore[attr-defined]
+        core._state._model_id = None  # type: ignore[attr-defined]  # pylint: disable=protected-access
 
     def tearDown(self):
-        core._state._model_id = None  # type: ignore[attr-defined]
+        core._state._model_id = None  # type: ignore[attr-defined]  # pylint: disable=protected-access
         self.env_patch.stop()
 
     def test_default_model_used_when_none_configured(self):
@@ -34,13 +38,14 @@ class ModelFallbackTests(unittest.TestCase):
 
 
 class ImageGenerationTests(unittest.TestCase):
+    """Unit tests for generation and editing helpers."""
     def setUp(self):
         self.env_patch = patch.dict(os.environ, {core.API_KEY_ENV: "test-key"}, clear=True)
         self.env_patch.start()
-        core._state._model_id = None  # type: ignore[attr-defined]
+        core._state._model_id = None  # type: ignore[attr-defined]  # pylint: disable=protected-access
 
     def tearDown(self):
-        core._state._model_id = None  # type: ignore[attr-defined]
+        core._state._model_id = None  # type: ignore[attr-defined]  # pylint: disable=protected-access
         self.env_patch.stop()
 
     def _inline_response(self, mime_type: str, data_b64: str):
@@ -125,6 +130,7 @@ class ImageGenerationTests(unittest.TestCase):
 
 @unittest.skipUnless(os.getenv(core.API_KEY_ENV), "GOOGLE_AI_API_KEY not set; integration test skipped")
 class ImageEditingIntegrationTests(unittest.TestCase):
+    """Integration tests that hit the live Gemini image APIs."""
     def _png_size(self, buf: bytes):
         sig = b"\x89PNG\r\n\x1a\n"
         if not buf.startswith(sig) or len(buf) < 24:
@@ -145,7 +151,7 @@ class ImageEditingIntegrationTests(unittest.TestCase):
 
         out_dir = Path("test_output")
         out_dir.mkdir(exist_ok=True)
-        ts = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
 
         # Generate red apple
         gen = core.generate_image(

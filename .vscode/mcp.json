@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "imagen": {
+      "command": "${workspaceFolder}/run_with_venv.sh",
+      "args": [],
+      "env": {
+        "IMAGEN_MODEL_ID": "gemini-3-pro-image-preview"
+      }
+    }
+  }
+}

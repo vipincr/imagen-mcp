@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import base64
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastmcp import FastMCP
 
@@ -16,6 +16,8 @@ from .core import (
     ImageResult,
     edit_image,
     generate_image,
+    generate_image_resized,
+    convert_image_format,
     get_api_key,
     get_current_model,
     infer_extension,
@@ -26,17 +28,17 @@ from .core import (
     write_image_to_file,
 )
 
-# Create the MCP server instance
+# Create the MCP server instance (logging configured at run-time to avoid deprecation)
 mcp = FastMCP("Imagen - Google AI Image Generator")
 
 
 @mcp.tool()
 def list_image_models() -> dict:
     """List available image generation models from Google AI.
-    
+
     This tool queries the Google AI API to retrieve a list of models that support
     image generation. Use this to discover which models are available for your API key.
-    
+
     Returns:
         A dictionary containing:
         - success: Boolean indicating if the operation succeeded
@@ -47,7 +49,7 @@ def list_image_models() -> dict:
     try:
         models = list_available_models(image_only=True)
         current = get_current_model()
-        
+
         model_list = [
             {
                 "name": m.name,
@@ -56,7 +58,7 @@ def list_image_models() -> dict:
             }
             for m in models
         ]
-        
+
         return {
             "success": True,
             "models": model_list,
@@ -73,13 +75,13 @@ def list_image_models() -> dict:
 @mcp.tool()
 def set_image_model(model_name: str) -> dict:
     """Set the model to use for image generation.
-    
+
     This tool sets the active model for subsequent image generation requests.
     Use 'list_image_models' first to see available models.
-    
+
     Args:
         model_name: The name/ID of the model to use (e.g., "gemini-2.0-flash-exp-image-generation").
-    
+
     Returns:
         A dictionary containing:
         - success: Boolean indicating if the operation succeeded
@@ -92,10 +94,10 @@ def set_image_model(model_name: str) -> dict:
                 "success": False,
                 "error": "Model name is required and must be a string.",
             }
-        
+
         # Set the model
         set_current_model(model_name.strip())
-        
+
         return {
             "success": True,
             "model": model_name.strip(),
@@ -111,7 +113,7 @@ def set_image_model(model_name: str) -> dict:
 @mcp.tool()
 def get_current_image_model() -> dict:
     """Get the currently selected image generation model.
-    
+
     Returns:
         A dictionary containing:
         - success: Boolean indicating if the operation succeeded
@@ -121,7 +123,7 @@ def get_current_image_model() -> dict:
     try:
         current = get_current_model()
         has_key = get_api_key() is not None
-        
+
         return {
             "success": True,
             "model": current,
@@ -142,10 +144,10 @@ def generate_image_from_prompt(
     model: Optional[str] = None,
 ) -> dict:
     """Generate an image using Google AI (Gemini/Imagen).
-    
+
     This tool generates images based on text prompts using Google's AI models.
     Make sure to set a model first using 'set_image_model' or provide one here.
-    
+
     Args:
         prompt: A detailed text description of the image to generate.
                 Be specific about style, lighting, composition, and subject matter.
@@ -154,7 +156,7 @@ def generate_image_from_prompt(
                      Supported values: "1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"
                      Note: Not all models support all aspect ratios.
         model: Optional model to use. If not provided, uses the currently selected model.
-    
+
     Returns:
         A dictionary containing:
         - success: Boolean indicating if generation succeeded
@@ -179,11 +181,11 @@ def generate_image_from_prompt(
                 result = generate_image(prompt=prompt, model_id=model)
             else:
                 raise
-        
+
         # Encode buffer to base64 for transport
         image_base64 = base64.b64encode(result.buffer).decode("utf-8")
         extension = infer_extension(result.mime_type)
-        
+
         return {
             "success": True,
             "image_base64": image_base64,
@@ -200,21 +202,149 @@ def generate_image_from_prompt(
 
 
 @mcp.tool()
+def generate_image_resized_from_prompt(
+    prompt: str,
+    max_width: int,
+    max_height: int,
+    *,
+    aspect_ratio: Optional[str] = None,
+    model: Optional[str] = None,
+    format: Optional[str] = None,  # pylint: disable=redefined-builtin
+    quality: Optional[int] = 85,
+) -> dict:
+    """Generate an image, then resize/compress it to the target bounds.
+    Keeps high-res generation separate from optimized output flows.
+    """
+    try:
+        result: ImageResult = generate_image_resized(
+            prompt=prompt,
+            max_width=max_width,
+            max_height=max_height,
+            aspect_ratio=aspect_ratio,
+            model_id=model,
+            output_format=format,
+            quality=quality if quality is not None else 85,
+        )
+
+        image_base64 = base64.b64encode(result.buffer).decode("utf-8")
+        extension = infer_extension(result.mime_type)
+
+        return {
+            "success": True,
+            "image_base64": image_base64,
+            "mime_type": result.mime_type,
+            "extension": extension,
+            "size_bytes": len(result.buffer),
+            "model_used": model or get_current_model(),
+            "resized": True,
+            "max_width": max_width,
+            "max_height": max_height,
+        }
+    except (ValueError, RuntimeError, OSError) as e:
+        return {
+            "success": False,
+            "error": str(e),
+        }
+
+
+@mcp.tool()
+def generate_and_save_image_resized(
+    prompt: str,
+    output_path: str,
+    max_width: int,
+    max_height: int,
+    *,
+    aspect_ratio: Optional[str] = None,
+    model: Optional[str] = None,
+    format: Optional[str] = None,  # pylint: disable=redefined-builtin
+    quality: Optional[int] = 85,
+) -> dict:
+    """Generate an image, resize/compress it, and save to disk.
+
+    This avoids overwriting the high-res save path and keeps optimized output separate.
+    """
+    try:
+        result: ImageResult = generate_image_resized(
+            prompt=prompt,
+            max_width=max_width,
+            max_height=max_height,
+            aspect_ratio=aspect_ratio,
+            model_id=model,
+            output_format=format,
+            quality=quality if quality is not None else 85,
+        )
+
+        path = Path(output_path)
+        if not path.suffix:
+            path = path.with_suffix(infer_extension(result.mime_type))
+
+        saved_path = write_image_to_file(result.buffer, path)
+
+        return {
+            "success": True,
+            "saved_path": str(saved_path.absolute()),
+            "mime_type": result.mime_type,
+            "size_bytes": len(result.buffer),
+            "model_used": model or get_current_model(),
+            "resized": True,
+            "max_width": max_width,
+            "max_height": max_height,
+        }
+    except (ValueError, RuntimeError, OSError) as e:
+        return {
+            "success": False,
+            "error": str(e),
+        }
+
+
+@mcp.tool()
+def convert_image(
+    input_path: str,
+    output_path: str,
+    format: str,  # pylint: disable=redefined-builtin
+    sizes: Optional[List[int]] = None,
+) -> dict:
+    """Convert image to another format; supports multi-size ICO for favicons.
+
+    Formats: png, jpeg/jpg, webp, heic/heif, ico. For ICO you can pass sizes like [16,32,48,64,128].
+    """
+    try:
+        out_path, mime = convert_image_format(
+            input_path=input_path,
+            output_path=output_path,
+            target_format=format,
+            sizes=sizes,
+        )
+        return {
+            "success": True,
+            "saved_path": str(out_path.absolute()),
+            "mime_type": mime,
+            "sizes": sizes,
+            "format": format,
+        }
+    except (ValueError, RuntimeError, OSError, FileNotFoundError) as e:
+        return {
+            "success": False,
+            "error": str(e),
+        }
+
+
+@mcp.tool()
 def save_image_to_file(
     image_base64: str,
     output_path: str,
 ) -> dict:
     """Save a base64-encoded image to a file.
-    
+
     This tool saves image data (typically from generate_image_from_prompt) to the filesystem.
     It will create any necessary parent directories.
-    
+
     Args:
         image_base64: Base64-encoded image data from generate_image_from_prompt.
         output_path: Absolute or relative path where the image should be saved.
                     Include the file extension (e.g., "/path/to/image.png").
                     Parent directories will be created if they don't exist.
-    
+
     Returns:
         A dictionary containing:
         - success: Boolean indicating if save succeeded
@@ -225,10 +355,10 @@ def save_image_to_file(
     try:
         # Decode base64 to bytes
         image_buffer = base64.b64decode(image_base64)
-        
+
         # Write to file
         saved_path = write_image_to_file(image_buffer, output_path)
-        
+
         return {
             "success": True,
             "saved_path": str(saved_path.absolute()),
@@ -249,11 +379,11 @@ def generate_and_save_image(
     model: Optional[str] = None,
 ) -> dict:
     """Generate an image and save it to a file in one operation.
-    
-    This is a convenience tool that combines generate_image_from_prompt and 
-    save_image_to_file into a single call. Use this when you know the 
+
+    This is a convenience tool that combines generate_image_from_prompt and
+    save_image_to_file into a single call. Use this when you know the
     destination path upfront.
-    
+
     Args:
         prompt: A detailed text description of the image to generate.
                 Be specific about style, lighting, composition, and subject matter.
@@ -263,7 +393,7 @@ def generate_and_save_image(
         aspect_ratio: Optional aspect ratio for the generated image.
                      Supported values: "1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"
         model: Optional model to use. If not provided, uses the currently selected model.
-    
+
     Returns:
         A dictionary containing:
         - success: Boolean indicating if the operation succeeded
@@ -287,16 +417,16 @@ def generate_and_save_image(
                 result = generate_image(prompt=prompt, model_id=model)
             else:
                 raise
-        
+
         # Determine the output path, adding extension if needed
         path = Path(output_path)
         if not path.suffix:
             extension = infer_extension(result.mime_type)
             path = path.with_suffix(extension)
-        
+
         # Save to file
         saved_path = write_image_to_file(result.buffer, path)
-        
+
         return {
             "success": True,
             "saved_path": str(saved_path.absolute()),
@@ -319,11 +449,11 @@ def edit_image_from_file(
     model: Optional[str] = None,
 ) -> dict:
     """Edit an existing image using a text prompt.
-    
+
     This tool reads an image from the filesystem and applies edits based on
     the text prompt. The model will attempt to modify only the specified
     aspects while preserving the rest of the image.
-    
+
     Args:
         input_path: Path to the existing image file to edit.
                    Supported formats: PNG, JPEG, WebP, GIF.
@@ -334,7 +464,7 @@ def edit_image_from_file(
         aspect_ratio: Optional aspect ratio for the output image.
                      Supported values: "1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"
         model: Optional model to use. If not provided, uses the currently selected model.
-    
+
     Returns:
         A dictionary containing:
         - success: Boolean indicating if the edit succeeded
@@ -348,7 +478,7 @@ def edit_image_from_file(
     try:
         # Read the input image
         image_base64, image_mime_type = read_image_file(input_path)
-        
+
         # Try with aspect ratio first, then without if it fails
         try:
             result: ImageResult = edit_image(
@@ -369,11 +499,11 @@ def edit_image_from_file(
                 )
             else:
                 raise
-        
+
         # Encode buffer to base64 for transport
         output_base64 = base64.b64encode(result.buffer).decode("utf-8")
         extension = infer_extension(result.mime_type)
-        
+
         return {
             "success": True,
             "image_base64": output_base64,
@@ -398,11 +528,11 @@ def edit_and_save_image(
     model: Optional[str] = None,
 ) -> dict:
     """Edit an existing image and save the result to a file.
-    
-    This is a convenience tool that combines edit_image_from_file and 
-    save_image_to_file into a single call. Use this when you know the 
+
+    This is a convenience tool that combines edit_image_from_file and
+    save_image_to_file into a single call. Use this when you know the
     destination path upfront.
-    
+
     Args:
         input_path: Path to the existing image file to edit.
                    Supported formats: PNG, JPEG, WebP, GIF.
@@ -416,7 +546,7 @@ def edit_and_save_image(
         aspect_ratio: Optional aspect ratio for the output image.
                      Supported values: "1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"
         model: Optional model to use. If not provided, uses the currently selected model.
-    
+
     Returns:
         A dictionary containing:
         - success: Boolean indicating if the operation succeeded
@@ -429,7 +559,7 @@ def edit_and_save_image(
     try:
         # Read the input image
         image_base64, image_mime_type = read_image_file(input_path)
-        
+
         # Try with aspect ratio first, then without if it fails
         try:
             result: ImageResult = edit_image(
@@ -450,16 +580,16 @@ def edit_and_save_image(
                 )
             else:
                 raise
-        
+
         # Determine the output path, adding extension if needed
         path = Path(output_path)
         if not path.suffix:
             extension = infer_extension(result.mime_type)
             path = path.with_suffix(extension)
-        
+
         # Save to file
         saved_path = write_image_to_file(result.buffer, path)
-        
+
         return {
             "success": True,
             "saved_path": str(saved_path.absolute()),
@@ -477,10 +607,10 @@ def edit_and_save_image(
 @mcp.tool()
 def check_api_status() -> dict:
     """Check if the Google AI API key is configured and valid.
-    
+
     This tool validates the API configuration by attempting to list available models.
     Use this to verify your setup before generating images.
-    
+
     Returns:
         A dictionary containing:
         - success: Boolean indicating if the check succeeded
@@ -494,7 +624,7 @@ def check_api_status() -> dict:
     try:
         has_key = get_api_key() is not None
         current = get_current_model()
-        
+
         if not has_key:
             return {
                 "success": True,
@@ -503,10 +633,10 @@ def check_api_status() -> dict:
                 "current_model": current,
                 "message": f"No API key configured. Set the {API_KEY_ENV} environment variable.",
             }
-        
+
         # Validate the key
         validation = validate_api_key()
-        
+
         if validation.get("valid"):
             return {
                 "success": True,
@@ -517,14 +647,14 @@ def check_api_status() -> dict:
                 "current_model": current,
                 "message": "API key is valid and working.",
             }
-        else:
-            return {
-                "success": True,
-                "api_key_configured": True,
-                "api_key_valid": False,
-                "current_model": current,
-                "error": validation.get("error", "Unknown validation error"),
-            }
+
+        return {
+            "success": True,
+            "api_key_configured": True,
+            "api_key_valid": False,
+            "current_model": current,
+            "error": validation.get("error", "Unknown validation error"),
+        }
     except (ValueError, RuntimeError, OSError) as e:
         return {
             "success": False,
