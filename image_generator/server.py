@@ -17,6 +17,8 @@ from .core import (
     edit_image,
     generate_image,
     generate_image_resized,
+    generate_image_with_references,
+    generate_image_with_references_resized,
     convert_image_format,
     get_api_key,
     get_current_model,
@@ -30,6 +32,92 @@ from .core import (
 
 # Create the MCP server instance (logging configured at run-time to avoid deprecation)
 mcp = FastMCP("Imagen - Google AI Image Generator")
+
+
+def _model_used(model: Optional[str]) -> str:
+    return model or get_current_model()
+
+
+def _encode_image_result(result: ImageResult, *, model: Optional[str], extra: Optional[dict] = None) -> dict:
+    image_base64 = base64.b64encode(result.buffer).decode("utf-8")
+    payload = {
+        "success": True,
+        "image_base64": image_base64,
+        "mime_type": result.mime_type,
+        "extension": infer_extension(result.mime_type),
+        "size_bytes": len(result.buffer),
+        "model_used": _model_used(model),
+    }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def _save_image_result(
+    result: ImageResult,
+    *,
+    output_path: str,
+    model: Optional[str],
+    extra: Optional[dict] = None,
+) -> dict:
+    path = Path(output_path)
+    if not path.suffix:
+        path = path.with_suffix(infer_extension(result.mime_type))
+
+    saved_path = write_image_to_file(result.buffer, path)
+    payload = {
+        "success": True,
+        "saved_path": str(saved_path.absolute()),
+        "mime_type": result.mime_type,
+        "size_bytes": len(result.buffer),
+        "model_used": _model_used(model),
+    }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def _handle_image_result(
+    result: ImageResult,
+    *,
+    model: Optional[str],
+    output_path: Optional[str] = None,
+    extra: Optional[dict] = None,
+) -> dict:
+    """Return an encoded response or save the image, based on output_path."""
+    if output_path:
+        return _save_image_result(result, output_path=output_path, model=model, extra=extra)
+    return _encode_image_result(result, model=model, extra=extra)
+
+
+def _wrap_tool(fn):
+    """Execute a tool handler and normalize common error handling."""
+    try:
+        return fn()
+    except (ValueError, RuntimeError, OSError, FileNotFoundError) as exc:  # noqa: PERF203 safe surface errors
+        return {"success": False, "error": str(exc)}
+
+
+
+def _call_with_aspect_ratio_fallback(fn, *, aspect_ratio: Optional[str], **kwargs):
+    if not aspect_ratio:
+        return fn(**kwargs)
+
+    try:
+        return fn(aspect_ratio=aspect_ratio, **kwargs)
+    except RuntimeError as exc:
+        if "Aspect ratio is not enabled" in str(exc):
+            return fn(**kwargs)
+        raise
+
+
+def _read_reference_images(reference_paths: List[str]):
+    if not reference_paths or not isinstance(reference_paths, list):
+        raise ValueError("reference_paths must be a non-empty list of 1-3 paths.")
+    if len(reference_paths) > 3:
+        raise ValueError("A maximum of 3 reference images are supported.")
+
+    return [read_image_file(p) for p in reference_paths]
 
 
 @mcp.tool()
@@ -167,38 +255,17 @@ def generate_image_from_prompt(
         - model_used: The model that was used for generation
         - error: Error message (if failed)
     """
-    try:
-        # Try with aspect ratio first, then without if it fails
-        try:
-            result: ImageResult = generate_image(
-                prompt=prompt,
+    return _wrap_tool(
+        lambda: _handle_image_result(
+            _call_with_aspect_ratio_fallback(
+                generate_image,
                 aspect_ratio=aspect_ratio,
+                prompt=prompt,
                 model_id=model,
-            )
-        except RuntimeError as e:
-            if "Aspect ratio is not enabled" in str(e) and aspect_ratio:
-                # Retry without aspect ratio
-                result = generate_image(prompt=prompt, model_id=model)
-            else:
-                raise
-
-        # Encode buffer to base64 for transport
-        image_base64 = base64.b64encode(result.buffer).decode("utf-8")
-        extension = infer_extension(result.mime_type)
-
-        return {
-            "success": True,
-            "image_base64": image_base64,
-            "mime_type": result.mime_type,
-            "extension": extension,
-            "size_bytes": len(result.buffer),
-            "model_used": model or get_current_model(),
-        }
-    except (ValueError, RuntimeError, OSError) as e:
-        return {
-            "success": False,
-            "error": str(e),
-        }
+            ),
+            model=model,
+        )
+    )
 
 
 @mcp.tool()
@@ -215,36 +282,25 @@ def generate_image_resized_from_prompt(
     """Generate an image, then resize/compress it to the target bounds.
     Keeps high-res generation separate from optimized output flows.
     """
-    try:
-        result: ImageResult = generate_image_resized(
-            prompt=prompt,
-            max_width=max_width,
-            max_height=max_height,
-            aspect_ratio=aspect_ratio,
-            model_id=model,
-            output_format=format,
-            quality=quality if quality is not None else 85,
+    return _wrap_tool(
+        lambda: _handle_image_result(
+            generate_image_resized(
+                prompt=prompt,
+                max_width=max_width,
+                max_height=max_height,
+                aspect_ratio=aspect_ratio,
+                model_id=model,
+                output_format=format,
+                quality=quality if quality is not None else 85,
+            ),
+            model=model,
+            extra={
+                "resized": True,
+                "max_width": max_width,
+                "max_height": max_height,
+            },
         )
-
-        image_base64 = base64.b64encode(result.buffer).decode("utf-8")
-        extension = infer_extension(result.mime_type)
-
-        return {
-            "success": True,
-            "image_base64": image_base64,
-            "mime_type": result.mime_type,
-            "extension": extension,
-            "size_bytes": len(result.buffer),
-            "model_used": model or get_current_model(),
-            "resized": True,
-            "max_width": max_width,
-            "max_height": max_height,
-        }
-    except (ValueError, RuntimeError, OSError) as e:
-        return {
-            "success": False,
-            "error": str(e),
-        }
+    )
 
 
 @mcp.tool()
@@ -263,38 +319,26 @@ def generate_and_save_image_resized(
 
     This avoids overwriting the high-res save path and keeps optimized output separate.
     """
-    try:
-        result: ImageResult = generate_image_resized(
-            prompt=prompt,
-            max_width=max_width,
-            max_height=max_height,
-            aspect_ratio=aspect_ratio,
-            model_id=model,
-            output_format=format,
-            quality=quality if quality is not None else 85,
+    return _wrap_tool(
+        lambda: _handle_image_result(
+            generate_image_resized(
+                prompt=prompt,
+                max_width=max_width,
+                max_height=max_height,
+                aspect_ratio=aspect_ratio,
+                model_id=model,
+                output_format=format,
+                quality=quality if quality is not None else 85,
+            ),
+            model=model,
+            output_path=output_path,
+            extra={
+                "resized": True,
+                "max_width": max_width,
+                "max_height": max_height,
+            },
         )
-
-        path = Path(output_path)
-        if not path.suffix:
-            path = path.with_suffix(infer_extension(result.mime_type))
-
-        saved_path = write_image_to_file(result.buffer, path)
-
-        return {
-            "success": True,
-            "saved_path": str(saved_path.absolute()),
-            "mime_type": result.mime_type,
-            "size_bytes": len(result.buffer),
-            "model_used": model or get_current_model(),
-            "resized": True,
-            "max_width": max_width,
-            "max_height": max_height,
-        }
-    except (ValueError, RuntimeError, OSError) as e:
-        return {
-            "success": False,
-            "error": str(e),
-        }
+    )
 
 
 @mcp.tool()
@@ -403,42 +447,18 @@ def generate_and_save_image(
         - model_used: The model that was used for generation
         - error: Error message (if failed)
     """
-    try:
-        # Try with aspect ratio first, then without if it fails
-        try:
-            result: ImageResult = generate_image(
-                prompt=prompt,
+    return _wrap_tool(
+        lambda: _handle_image_result(
+            _call_with_aspect_ratio_fallback(
+                generate_image,
                 aspect_ratio=aspect_ratio,
+                prompt=prompt,
                 model_id=model,
-            )
-        except RuntimeError as e:
-            if "Aspect ratio is not enabled" in str(e) and aspect_ratio:
-                # Retry without aspect ratio
-                result = generate_image(prompt=prompt, model_id=model)
-            else:
-                raise
-
-        # Determine the output path, adding extension if needed
-        path = Path(output_path)
-        if not path.suffix:
-            extension = infer_extension(result.mime_type)
-            path = path.with_suffix(extension)
-
-        # Save to file
-        saved_path = write_image_to_file(result.buffer, path)
-
-        return {
-            "success": True,
-            "saved_path": str(saved_path.absolute()),
-            "mime_type": result.mime_type,
-            "size_bytes": len(result.buffer),
-            "model_used": model or get_current_model(),
-        }
-    except (ValueError, RuntimeError, OSError) as e:
-        return {
-            "success": False,
-            "error": str(e),
-        }
+            ),
+            model=model,
+            output_path=output_path,
+        )
+    )
 
 
 @mcp.tool()
@@ -475,48 +495,19 @@ def edit_image_from_file(
         - model_used: The model that was used for editing
         - error: Error message (if failed)
     """
-    try:
-        # Read the input image
+    def _run():
         image_base64, image_mime_type = read_image_file(input_path)
+        result: ImageResult = _call_with_aspect_ratio_fallback(
+            edit_image,
+            aspect_ratio=aspect_ratio,
+            prompt=prompt,
+            image_data=image_base64,
+            image_mime_type=image_mime_type,
+            model_id=model,
+        )
+        return _handle_image_result(result, model=model)
 
-        # Try with aspect ratio first, then without if it fails
-        try:
-            result: ImageResult = edit_image(
-                prompt=prompt,
-                image_data=image_base64,
-                image_mime_type=image_mime_type,
-                aspect_ratio=aspect_ratio,
-                model_id=model,
-            )
-        except RuntimeError as e:
-            if "Aspect ratio is not enabled" in str(e) and aspect_ratio:
-                # Retry without aspect ratio
-                result = edit_image(
-                    prompt=prompt,
-                    image_data=image_base64,
-                    image_mime_type=image_mime_type,
-                    model_id=model,
-                )
-            else:
-                raise
-
-        # Encode buffer to base64 for transport
-        output_base64 = base64.b64encode(result.buffer).decode("utf-8")
-        extension = infer_extension(result.mime_type)
-
-        return {
-            "success": True,
-            "image_base64": output_base64,
-            "mime_type": result.mime_type,
-            "extension": extension,
-            "size_bytes": len(result.buffer),
-            "model_used": model or get_current_model(),
-        }
-    except (ValueError, RuntimeError, OSError, FileNotFoundError) as e:
-        return {
-            "success": False,
-            "error": str(e),
-        }
+    return _wrap_tool(_run)
 
 
 @mcp.tool()
@@ -556,52 +547,171 @@ def edit_and_save_image(
         - model_used: The model that was used for editing
         - error: Error message (if failed)
     """
-    try:
-        # Read the input image
+    def _run():
         image_base64, image_mime_type = read_image_file(input_path)
+        result: ImageResult = _call_with_aspect_ratio_fallback(
+            edit_image,
+            aspect_ratio=aspect_ratio,
+            prompt=prompt,
+            image_data=image_base64,
+            image_mime_type=image_mime_type,
+            model_id=model,
+        )
+        return _handle_image_result(result, model=model, output_path=output_path)
 
-        # Try with aspect ratio first, then without if it fails
-        try:
-            result: ImageResult = edit_image(
-                prompt=prompt,
-                image_data=image_base64,
-                image_mime_type=image_mime_type,
-                aspect_ratio=aspect_ratio,
-                model_id=model,
-            )
-        except RuntimeError as e:
-            if "Aspect ratio is not enabled" in str(e) and aspect_ratio:
-                # Retry without aspect ratio
-                result = edit_image(
-                    prompt=prompt,
-                    image_data=image_base64,
-                    image_mime_type=image_mime_type,
-                    model_id=model,
-                )
-            else:
-                raise
+    return _wrap_tool(_run)
 
-        # Determine the output path, adding extension if needed
-        path = Path(output_path)
-        if not path.suffix:
-            extension = infer_extension(result.mime_type)
-            path = path.with_suffix(extension)
 
-        # Save to file
-        saved_path = write_image_to_file(result.buffer, path)
+@mcp.tool()
+def generate_image_with_references_from_files(
+    reference_paths: List[str],
+    prompt: str,
+    aspect_ratio: Optional[str] = None,
+    model: Optional[str] = None,
+) -> dict:
+    """Generate an image using a prompt plus up to 3 reference images from disk.
 
-        return {
-            "success": True,
-            "saved_path": str(saved_path.absolute()),
-            "mime_type": result.mime_type,
-            "size_bytes": len(result.buffer),
-            "model_used": model or get_current_model(),
-        }
-    except (ValueError, RuntimeError, OSError, FileNotFoundError) as e:
-        return {
-            "success": False,
-            "error": str(e),
-        }
+    IMPORTANT: reference images are *visual inputs* to the model.
+    Use this tool when the prompt needs to:
+    - Preserve a referenced object/subject and include it in the output scene (as-is), OR
+    - Include it but with specified modifications, OR
+    - Use references for style/composition inspiration.
+
+    Prompts should clearly specify whether referenced content must be identical
+    ("do not change any details") or may be modified.
+    """
+    def _run():
+        refs = _read_reference_images(reference_paths)
+        result: ImageResult = _call_with_aspect_ratio_fallback(
+            generate_image_with_references,
+            aspect_ratio=aspect_ratio,
+            prompt=prompt,
+            reference_images=refs,
+            model_id=model,
+        )
+        return _handle_image_result(
+            result,
+            model=model,
+            extra={"reference_count": len(reference_paths)},
+        )
+
+    return _wrap_tool(_run)
+
+
+@mcp.tool()
+def generate_image_with_references_resized_from_files(
+    reference_paths: List[str],
+    prompt: str,
+    max_width: int,
+    max_height: int,
+    *,
+    aspect_ratio: Optional[str] = None,
+    model: Optional[str] = None,
+    format: Optional[str] = None,  # pylint: disable=redefined-builtin
+    quality: Optional[int] = 85,
+) -> dict:
+    """Generate an image with references, then resize/compress to target bounds.
+
+    Use this when you need the referenced content to be used as actual visual
+    input (potentially included as-is) and also need optimized output size.
+    """
+    def _run():
+        refs = _read_reference_images(reference_paths)
+        result: ImageResult = generate_image_with_references_resized(
+            prompt=prompt,
+            reference_images=refs,
+            max_width=max_width,
+            max_height=max_height,
+            aspect_ratio=aspect_ratio,
+            model_id=model,
+            output_format=format,
+            quality=quality if quality is not None else 85,
+        )
+        return _handle_image_result(
+            result,
+            model=model,
+            extra={
+                "resized": True,
+                "max_width": max_width,
+                "max_height": max_height,
+                "reference_count": len(reference_paths),
+            },
+        )
+
+    return _wrap_tool(_run)
+
+
+@mcp.tool()
+def generate_and_save_image_with_references(
+    reference_paths: List[str],
+    prompt: str,
+    output_path: str,
+    aspect_ratio: Optional[str] = None,
+    model: Optional[str] = None,
+) -> dict:
+    """Generate an image with references and save it to a file.
+
+    This is the convenience variant for workflows where references must be used
+    as visual inputs and the output needs to be written to disk.
+    """
+    def _run():
+        refs = _read_reference_images(reference_paths)
+        result: ImageResult = _call_with_aspect_ratio_fallback(
+            generate_image_with_references,
+            aspect_ratio=aspect_ratio,
+            prompt=prompt,
+            reference_images=refs,
+            model_id=model,
+        )
+        return _handle_image_result(
+            result,
+            model=model,
+            output_path=output_path,
+            extra={"reference_count": len(reference_paths)},
+        )
+
+    return _wrap_tool(_run)
+
+
+@mcp.tool()
+def generate_and_save_image_with_references_resized(
+    reference_paths: List[str],
+    prompt: str,
+    output_path: str,
+    max_width: int,
+    max_height: int,
+    *,
+    aspect_ratio: Optional[str] = None,
+    model: Optional[str] = None,
+    format: Optional[str] = None,  # pylint: disable=redefined-builtin
+    quality: Optional[int] = 85,
+) -> dict:
+    """Generate an image with references, resize/compress it, and save to disk."""
+    def _run():
+        refs = _read_reference_images(reference_paths)
+        result: ImageResult = generate_image_with_references_resized(
+            prompt=prompt,
+            reference_images=refs,
+            max_width=max_width,
+            max_height=max_height,
+            aspect_ratio=aspect_ratio,
+            model_id=model,
+            output_format=format,
+            quality=quality if quality is not None else 85,
+        )
+        return _handle_image_result(
+            result,
+            model=model,
+            output_path=output_path,
+            extra={
+                "resized": True,
+                "max_width": max_width,
+                "max_height": max_height,
+                "reference_count": len(reference_paths),
+            },
+        )
+
+    return _wrap_tool(_run)
 
 
 @mcp.tool()
@@ -665,3 +775,6 @@ def check_api_status() -> dict:
 # Entry point for running the server
 if __name__ == "__main__":
     mcp.run()
+
+
+__all__ = [name for name in globals() if not name.startswith("_")]

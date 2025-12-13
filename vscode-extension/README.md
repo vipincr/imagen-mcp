@@ -4,6 +4,7 @@ Manage and configure the Imagen MCP server from VS Code:
 - Securely store your Google AI API key (Secret Storage)
 - Pick the image model (default `gemini-3-pro-image-preview`)
 - Auto-generate `.vscode/mcp.json` so MCP works out of the box
+- Use MCP image tools including generation, editing, and generation with up to 3 reference images (references can be used as actual visual inputs per prompt)
 - **Standalone installation** — no additional files required in your workspace
 
 ## Requirements

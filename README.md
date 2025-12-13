@@ -29,10 +29,14 @@ A high-quality [Model Context Protocol (MCP)](https://modelcontextprotocol.io) s
 | `set_image_model` | Select which model to use for generation |
 | `get_current_image_model` | Check which model is currently selected |
 | `generate_image_from_prompt` | Generate images from text descriptions |
+| `generate_image_with_references_from_files` | Generate using 1–3 reference images (can be included as actual content, as-is or modified per prompt) |
 | `generate_image_resized_from_prompt` | Generate an image then resize/compress to target bounds |
+| `generate_image_with_references_resized_from_files` | Generate with references then resize/compress |
 | `save_image_to_file` | Save generated images to the filesystem |
 | `generate_and_save_image` | Generate and save in a single operation |
 | `generate_and_save_image_resized` | Generate, resize/compress, and save an optimized output |
+| `generate_and_save_image_with_references` | Generate with references and save in one step |
+| `generate_and_save_image_with_references_resized` | Generate with references, resize/compress, and save |
 | `convert_image` | Convert formats (png, jpeg, webp, heic/heif, ico) with favicon sizing |
 
 ## 🔧 Prerequisites
@@ -257,6 +261,40 @@ Generate an image from a text description.
   "model_used": "gemini-3-pro-image-preview"
 }
 ```
+
+---
+
+### `generate_image_with_references_from_files`
+
+Generate an image using **1–3 reference images** (files on disk) plus a text prompt.
+
+**Important:** reference images are *visual inputs* — you can instruct the model to include the referenced object/subject inside the generated image (as-is or modified), not only copy its style.
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `reference_paths` | string[] | ✅ | 1–3 paths to reference images (order matters) |
+| `prompt` | string | ✅ | Describe the output and how to use each reference (e.g., keep object identical vs modify) |
+| `aspect_ratio` | string | ❌ | Optional aspect ratio |
+| `model` | string | ❌ | Override the current model |
+
+---
+
+### `generate_image_with_references_resized_from_files`
+
+Same as `generate_image_with_references_from_files`, but additionally resizes/compresses to target bounds.
+
+---
+
+### `generate_and_save_image_with_references`
+
+Convenience tool that generates from references and saves to `output_path` (adds an extension if missing).
+
+---
+
+### `generate_and_save_image_with_references_resized`
+
+Convenience tool that generates from references, resizes/compresses, and saves to `output_path`.
 
 ---
 

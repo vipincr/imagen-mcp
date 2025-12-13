@@ -131,6 +131,17 @@ class ImageGenerationTests(unittest.TestCase):
 @unittest.skipUnless(os.getenv(core.API_KEY_ENV), "GOOGLE_AI_API_KEY not set; integration test skipped")
 class ImageEditingIntegrationTests(unittest.TestCase):
     """Integration tests that hit the live Gemini image APIs."""
+    red_apple_path: Path | None = None
+    green_apple_path: Path | None = None
+
+    def _out_dir(self) -> Path:
+        out_dir = Path("test_output")
+        out_dir.mkdir(exist_ok=True)
+        return out_dir
+
+    def _ts(self) -> str:
+        # Include microseconds to avoid collisions across fast test runs.
+        return datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
     def _png_size(self, buf: bytes):
         sig = b"\x89PNG\r\n\x1a\n"
         if not buf.startswith(sig) or len(buf) < 24:
@@ -144,14 +155,13 @@ class ImageEditingIntegrationTests(unittest.TestCase):
         target = next((m.name for m in models if m.name == "gemini-3-pro-image-preview"), None)
         return target or (models[0].name if models else None)
 
-    def test_generate_and_edit_apple_color_only(self):
+    def test_01_generate_and_edit_apple_color_only(self):
         model = self._choose_model()
         self.assertIsNotNone(model, "No image model available for integration test")
         core.set_current_model(model)
 
-        out_dir = Path("test_output")
-        out_dir.mkdir(exist_ok=True)
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        out_dir = self._out_dir()
+        ts = self._ts()
 
         # Generate red apple
         gen = core.generate_image(
@@ -163,6 +173,7 @@ class ImageEditingIntegrationTests(unittest.TestCase):
         red_path = out_dir / f"red_apple_{ts}.png"
         core.write_image_to_file(gen.buffer, red_path)
         self.assertTrue(red_path.exists())
+        self.__class__.red_apple_path = red_path
 
         # Edit apple to green without altering other attributes
         image_b64 = base64.b64encode(gen.buffer).decode("utf-8")
@@ -180,10 +191,142 @@ class ImageEditingIntegrationTests(unittest.TestCase):
         green_path = out_dir / f"green_apple_{ts}.png"
         core.write_image_to_file(edited.buffer, green_path)
         self.assertTrue(green_path.exists())
+        self.__class__.green_apple_path = green_path
 
         green_png_size = self._png_size(edited.buffer)
         if red_png_size and green_png_size:
             self.assertEqual(red_png_size, green_png_size)
+
+
+    def test_02_generate_with_reference_apple_held_by_man(self):
+        model = self._choose_model()
+        self.assertIsNotNone(model, "No image model available for integration test")
+        core.set_current_model(model)
+
+        out_dir = self._out_dir()
+        ts = self._ts()
+
+        ref_path = self.__class__.red_apple_path
+        if not ref_path or not ref_path.exists():
+            gen = core.generate_image(
+                prompt="A photorealistic red apple on a white background, simple studio lighting"
+            )
+            ref_path = out_dir / f"red_apple_{ts}.png"
+            core.write_image_to_file(gen.buffer, ref_path)
+            self.assertTrue(ref_path.exists())
+            self.__class__.red_apple_path = ref_path
+
+        ref_b64, ref_mime = core.read_image_file(ref_path)
+
+        prompt = (
+            "Generate a photorealistic image of a man holding the exact same red apple from the reference image. "
+            "The apple must be identical in shape, size, texture, stem, lighting, highlights, shadows, and color; "
+            "do not alter any details of the apple. Keep the apple exactly as-is; only add the man and his hand "
+            "holding it naturally. Use a clean, simple studio background."
+        )
+
+        out = core.generate_image_with_references(
+            prompt=prompt,
+            reference_images=[(ref_b64, ref_mime)],
+        )
+
+        self.assertGreater(len(out.buffer), 0)
+        out_path = out_dir / f"man_holding_same_apple_{ts}.png"
+        core.write_image_to_file(out.buffer, out_path)
+        self.assertTrue(out_path.exists())
+
+
+    def test_03_generate_with_multiple_references_two_apples_held_by_man(self):
+        model = self._choose_model()
+        self.assertIsNotNone(model, "No image model available for integration test")
+        core.set_current_model(model)
+
+        out_dir = self._out_dir()
+        ts = self._ts()
+
+        red_path = self.__class__.red_apple_path
+        green_path = self.__class__.green_apple_path
+
+        if not red_path or not red_path.exists():
+            gen = core.generate_image(
+                prompt="A photorealistic red apple on a white background, simple studio lighting"
+            )
+            red_path = out_dir / f"red_apple_{ts}.png"
+            core.write_image_to_file(gen.buffer, red_path)
+            self.assertTrue(red_path.exists())
+            self.__class__.red_apple_path = red_path
+
+        if not green_path or not green_path.exists():
+            red_b64, red_mime = core.read_image_file(red_path)
+            edited = core.edit_image(
+                prompt=(
+                    "Change the apple to a green apple. Keep shape, size, texture, position, lighting, and background "
+                    "identical; only change the color of the apple."
+                ),
+                image_data=red_b64,
+                image_mime_type=red_mime,
+            )
+            green_path = out_dir / f"green_apple_{ts}.png"
+            core.write_image_to_file(edited.buffer, green_path)
+            self.assertTrue(green_path.exists())
+            self.__class__.green_apple_path = green_path
+
+        red_b64, red_mime = core.read_image_file(red_path)
+        green_b64, green_mime = core.read_image_file(green_path)
+
+        prompt = (
+            "Generate a photorealistic image of a man holding TWO apples: the exact red apple from reference image 1 "
+            "and the exact green apple from reference image 2. Each apple must be identical to its reference in "
+            "shape, size, texture, stem, lighting, highlights, shadows, and color; do not alter any details of either "
+            "apple. Only add the man and his hands holding them naturally. Use a clean, simple studio background."
+        )
+
+        out = core.generate_image_with_references(
+            prompt=prompt,
+            reference_images=[(red_b64, red_mime), (green_b64, green_mime)],
+        )
+
+        self.assertGreater(len(out.buffer), 0)
+        out_path = out_dir / f"man_holding_red_and_green_apples_{ts}.png"
+        core.write_image_to_file(out.buffer, out_path)
+        self.assertTrue(out_path.exists())
+
+
+    def test_04_generate_with_reference_style_only_no_apple_present(self):
+        model = self._choose_model()
+        self.assertIsNotNone(model, "No image model available for integration test")
+        core.set_current_model(model)
+
+        out_dir = self._out_dir()
+        ts = self._ts()
+
+        red_path = self.__class__.red_apple_path
+        if not red_path or not red_path.exists():
+            gen = core.generate_image(
+                prompt="A photorealistic red apple on a white background, simple studio lighting"
+            )
+            red_path = out_dir / f"red_apple_{ts}.png"
+            core.write_image_to_file(gen.buffer, red_path)
+            self.assertTrue(red_path.exists())
+            self.__class__.red_apple_path = red_path
+
+        red_b64, red_mime = core.read_image_file(red_path)
+
+        prompt = (
+            "Use the reference image only to match the photography style (lighting, contrast, background cleanliness). "
+            "Generate a photorealistic portrait of a man smiling, with a clean studio background and similar lighting. "
+            "Do NOT include any apples or apple-like objects anywhere in the image."
+        )
+
+        out = core.generate_image_with_references(
+            prompt=prompt,
+            reference_images=[(red_b64, red_mime)],
+        )
+
+        self.assertGreater(len(out.buffer), 0)
+        out_path = out_dir / f"style_reference_no_apple_{ts}.png"
+        core.write_image_to_file(out.buffer, out_path)
+        self.assertTrue(out_path.exists())
 
 
 if __name__ == "__main__":

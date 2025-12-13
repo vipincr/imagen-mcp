@@ -2,7 +2,7 @@
   "name": "imagen-mcp-vscode",
   "displayName": "Imagen MCP Server",
   "description": "Manage and configure the Imagen MCP server from VS Code, including API key and model selection.",
-  "version": "0.1.12",
+  "version": "0.1.14",
   "publisher": "gramini-consulting",
   "repository": {
     "type": "git",
@@ -66,8 +66,9 @@
   "scripts": {
     "compile": "tsc -p .",
     "lint": "echo 'no lint configured'",
+    "sync-python": "node ./scripts/sync-python.js",
     "package": "node ./scripts/bump-version.js && mkdir -p ../build && npx vsce package --out ../build",
-    "vscode:prepublish": "npm run compile"
+    "vscode:prepublish": "npm run compile && npm run sync-python"
   },
   "devDependencies": {
     "@types/node": "^22.9.1",

@@ -9,6 +9,8 @@ from .core import (
     ModelInfo,
     edit_image,
     generate_image,
+    generate_image_with_references,
+    generate_image_with_references_resized,
     get_current_model,
     infer_extension,
     list_available_models,
@@ -19,19 +21,6 @@ from .core import (
 )
 from .server import mcp
 
-__all__ = [
-    "mcp",
-    "edit_image",
-    "generate_image",
-    "get_current_model",
-    "infer_extension",
-    "list_available_models",
-    "read_image_file",
-    "set_current_model",
-    "validate_api_key",
-    "write_image_to_file",
-    "ImageResult",
-    "ModelInfo",
-]
+__all__ = [name for name in locals() if not name.startswith("_")]
 
 __version__ = "1.0.0"

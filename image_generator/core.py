@@ -1,13 +1,4 @@
-"""Core image generation logic for the Imagen MCP server.
-
-This module provides:
-- Image generation using Google's Gemini/Imagen models
-- Dynamic model discovery and selection
-- API key validation
-- File I/O utilities for saving generated images
-
-All functionality uses only Python standard library (no external HTTP libraries).
-"""
+"""Core image generation logic for the Imagen MCP server (standard library only)."""
 from __future__ import annotations
 
 import base64
@@ -150,6 +141,23 @@ def build_url(*, base_url: str = DEFAULT_BASE_URL, model_id: str, stream: bool =
     return f"{base}/{model_id}:{action}"
 
 
+def _build_generation_config(
+    *,
+    aspect_ratio: Optional[str] = None,
+    generation_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    cfg: Dict[str, Any] = {
+        **(generation_config or {}),
+        "responseModalities": ["TEXT", "IMAGE"],
+    }
+
+    if aspect_ratio:
+        image_cfg = cfg.setdefault("imageConfig", {})
+        image_cfg["aspectRatio"] = aspect_ratio
+
+    return cfg
+
+
 def build_request_body(
     prompt: str,
     *,
@@ -162,16 +170,11 @@ def build_request_body(
 
     body: Dict[str, Any] = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            **(generation_config or {}),
-            "responseModalities": ["TEXT", "IMAGE"],
-        },
+        "generationConfig": _build_generation_config(
+            aspect_ratio=aspect_ratio,
+            generation_config=generation_config,
+        ),
     }
-
-    if aspect_ratio:
-        image_cfg = body["generationConfig"].setdefault("imageConfig", {})
-        image_cfg["aspectRatio"] = aspect_ratio
-
     return body
 
 
@@ -214,43 +217,75 @@ def build_edit_request_body(
                 }
             ]
         }],
-        "generationConfig": {
-            **(generation_config or {}),
-            "responseModalities": ["TEXT", "IMAGE"],
-        },
+        "generationConfig": _build_generation_config(
+            aspect_ratio=aspect_ratio,
+            generation_config=generation_config,
+        ),
     }
-
-    if aspect_ratio:
-        image_cfg = body["generationConfig"].setdefault("imageConfig", {})
-        image_cfg["aspectRatio"] = aspect_ratio
-
     return body
 
 
-def _http_get_json(url: str, api_key: str) -> Dict[str, Any]:
-    """Make an HTTP GET request and return JSON response."""
-    req = request.Request(
-        url,
-        headers={
-            "Content-Type": "application/json",
-            "x-goog-api-key": api_key,
-        },
-        method="GET",
-    )
-    try:
-        with request.urlopen(req, timeout=30) as resp:
-            content = resp.read()
-            return json.loads(content.decode("utf-8"))
-    except error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="ignore") if hasattr(exc, "read") else ""
-        raise RuntimeError(f"API error {exc.code}: {detail[:400]}") from exc
-    except error.URLError as exc:
-        raise RuntimeError(f"Network error: {exc}") from exc
+def build_reference_request_body(
+    prompt: str,
+    reference_images: List[Tuple[str, str]],
+    *,
+    aspect_ratio: Optional[str] = None,
+    generation_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build the request body for generating an image using reference images.
+
+    IMPORTANT: Reference images are provided as *visual inputs* to the model.
+    Depending on your prompt, the model can:
+    - Treat them as inspiration (style/composition/palette), OR
+    - Recreate specific elements faithfully, OR
+    - Include the referenced subject/object inside the generated scene
+      (as-is or modified), as explicitly instructed.
+
+    To help agents select the right tool, prompts should be explicit about
+    whether the referenced content must be copied exactly ("keep identical")
+    or may be modified ("change color", "add text", etc.).
+
+    Args:
+        prompt: Text description of the desired output and how to use references.
+        reference_images: List of tuples (base64_data, mime_type). Up to 3.
+        aspect_ratio: Optional aspect ratio for the output image.
+        generation_config: Optional additional generation configuration.
+    """
+    if not prompt or not isinstance(prompt, str):
+        raise ValueError("Prompt is required and must be a string.")
+    if not reference_images or not isinstance(reference_images, list):
+        raise ValueError("At least one reference image is required.")
+    if len(reference_images) > 3:
+        raise ValueError("A maximum of 3 reference images are supported.")
+
+    parts: List[Dict[str, Any]] = [{"text": prompt}]
+    for image_data, image_mime_type in reference_images:
+        if not image_data or not isinstance(image_data, str):
+            raise ValueError("Reference image data must be a base64-encoded string.")
+        if not image_mime_type or not isinstance(image_mime_type, str):
+            raise ValueError("Reference image mime type must be a string.")
+        parts.append(
+            {
+                "inlineData": {
+                    "mimeType": image_mime_type,
+                    "data": image_data,
+                }
+            }
+        )
+
+    body: Dict[str, Any] = {
+        "contents": [{"parts": parts}],
+        "generationConfig": _build_generation_config(
+            aspect_ratio=aspect_ratio,
+            generation_config=generation_config,
+        ),
+    }
+    return body
 
 
-def _http_post_json(url: str, payload: Dict[str, Any], api_key: str) -> Dict[str, Any]:
-    """Make an HTTP POST request and return JSON response."""
-    data = json.dumps(payload).encode("utf-8")
+def _http_request_json(*, url: str, api_key: str, method: str, payload: Optional[Dict[str, Any]] = None,
+                       timeout: int = 30) -> Dict[str, Any]:
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = request.Request(
         url,
         data=data,
@@ -258,10 +293,10 @@ def _http_post_json(url: str, payload: Dict[str, Any], api_key: str) -> Dict[str
             "Content-Type": "application/json",
             "x-goog-api-key": api_key,
         },
-        method="POST",
+        method=method,
     )
     try:
-        with request.urlopen(req, timeout=120) as resp:
+        with request.urlopen(req, timeout=timeout) as resp:
             content = resp.read()
             return json.loads(content.decode("utf-8"))
     except error.HTTPError as exc:
@@ -269,6 +304,71 @@ def _http_post_json(url: str, payload: Dict[str, Any], api_key: str) -> Dict[str
         raise RuntimeError(f"API error {exc.code}: {detail[:400]}") from exc
     except error.URLError as exc:
         raise RuntimeError(f"Network error: {exc}") from exc
+
+
+def _http_get_json(url: str, api_key: str) -> Dict[str, Any]:
+    """Make an HTTP GET request and return JSON response."""
+    return _http_request_json(url=url, api_key=api_key, method="GET", timeout=30)
+
+
+def _http_post_json(url: str, payload: Dict[str, Any], api_key: str) -> Dict[str, Any]:
+    """Make an HTTP POST request and return JSON response."""
+    return _http_request_json(url=url, api_key=api_key, method="POST", payload=payload, timeout=120)
+
+
+def _generate_with_body(
+    *,
+    body: Dict[str, Any],
+    model_id: Optional[str] = None,
+    base_url: str = DEFAULT_BASE_URL,
+    api_key: Optional[str] = None,
+) -> ImageResult:
+    return _generate_image_from_body(body=body, model_id=model_id, base_url=base_url, api_key=api_key)
+
+
+def _generate_image_from_body(
+    *,
+    body: Dict[str, Any],
+    model_id: Optional[str] = None,
+    base_url: str = DEFAULT_BASE_URL,
+    api_key: Optional[str] = None,
+) -> ImageResult:
+    """Shared implementation for image generation/editing requests."""
+    effective_model = model_id or get_current_model()
+    if not effective_model:
+        raise ValueError(
+            "No model selected. Use the 'set_image_model' tool to select a model first, "
+            "or provide a model_id parameter."
+        )
+
+    response_json = _http_post_json(
+        build_url(base_url=base_url, model_id=effective_model),
+        body,
+        require_api_key(api_key),
+    )
+
+    part = _extract_image_part(response_json)
+    if not part:
+        raise RuntimeError("No image part found in API response.")
+
+    if part.get("data"):
+        return ImageResult(
+            buffer=_buffer_from_inline(part["data"]),
+            mime_type=part.get("mimeType", DEFAULT_MIME_TYPE),
+            response=response_json,
+        )
+
+    if part.get("fileUri") or part.get("url"):
+        target_url = part.get("fileUri") or part.get("url")
+        buffer, downloaded_mime = _http_get_bytes(target_url)
+        return ImageResult(
+            buffer=buffer,
+            mime_type=downloaded_mime,
+            response=response_json,
+            source_url=target_url,
+        )
+
+    raise RuntimeError("Unsupported image format in API response.")
 
 
 def _http_get_bytes(url: str) -> Tuple[bytes, str]:
@@ -668,42 +768,12 @@ def generate_image(
         ValueError: If no model is selected and none is provided.
         RuntimeError: If the API request fails.
     """
-    # Get the model to use
-    effective_model = model_id or get_current_model()
-    if not effective_model:
-        raise ValueError(
-            "No model selected. Use the 'set_image_model' tool to select a model first, "
-            "or provide a model_id parameter."
-        )
-
-    key = require_api_key(api_key)
-    url = build_url(base_url=base_url, model_id=effective_model)
-    body = build_request_body(prompt, aspect_ratio=aspect_ratio, generation_config=generation_config)
-
-    response_json = _http_post_json(url, body, key)
-    part = _extract_image_part(response_json)
-    if not part:
-        raise RuntimeError("No image part found in API response.")
-
-    if part.get("data"):
-        buffer = _buffer_from_inline(part["data"])
-        return ImageResult(
-            buffer=buffer,
-            mime_type=part.get("mimeType", DEFAULT_MIME_TYPE),
-            response=response_json
-        )
-
-    if part.get("fileUri") or part.get("url"):
-        target_url = part.get("fileUri") or part.get("url")
-        buffer, downloaded_mime = _http_get_bytes(target_url)
-        return ImageResult(
-            buffer=buffer,
-            mime_type=downloaded_mime,
-            response=response_json,
-            source_url=target_url
-        )
-
-    raise RuntimeError("Unsupported image format in API response.")
+    return _generate_with_body(
+        body=build_request_body(prompt, aspect_ratio=aspect_ratio, generation_config=generation_config),
+        model_id=model_id,
+        base_url=base_url,
+        api_key=api_key,
+    )
 
 
 def generate_image_resized(
@@ -821,47 +891,93 @@ def edit_image(
         ValueError: If no model is selected and none is provided, or invalid input.
         RuntimeError: If the API request fails.
     """
-    # Get the model to use
-    effective_model = model_id or get_current_model()
-    if not effective_model:
-        raise ValueError(
-            "No model selected. Use the 'set_image_model' tool to select a model first, "
-            "or provide a model_id parameter."
-        )
-
-    response_json = _http_post_json(
-        build_url(base_url=base_url, model_id=effective_model),
-        build_edit_request_body(
+    result = _generate_with_body(
+        body=build_edit_request_body(
             prompt,
             image_data,
             image_mime_type,
             aspect_ratio=aspect_ratio,
             generation_config=generation_config,
         ),
-        require_api_key(api_key),
+        model_id=model_id,
+        base_url=base_url,
+        api_key=api_key,
     )
-    part = _extract_image_part(response_json)
-    if not part:
+
+    if not result.buffer:
         raise RuntimeError("No image part found in API response. The model may not have edited the image.")
 
-    if part.get("data"):
-        return ImageResult(
-            buffer=_buffer_from_inline(part["data"]),
-            mime_type=part.get("mimeType", DEFAULT_MIME_TYPE),
-            response=response_json
-        )
+    return result
 
-    if part.get("fileUri") or part.get("url"):
-        target_url = part.get("fileUri") or part.get("url")
-        buffer, downloaded_mime = _http_get_bytes(target_url)
-        return ImageResult(
-            buffer=buffer,
-            mime_type=downloaded_mime,
-            response=response_json,
-            source_url=target_url
-        )
 
-    raise RuntimeError("Unsupported image format in API response.")
+def generate_image_with_references(
+    *,
+    prompt: str,
+    reference_images: List[Tuple[str, str]],
+    aspect_ratio: Optional[str] = None,
+    model_id: Optional[str] = None,
+    base_url: str = DEFAULT_BASE_URL,
+    api_key: Optional[str] = None,
+    generation_config: Optional[Dict[str, Any]] = None,
+) -> ImageResult:
+    """Generate an image using a prompt plus up to 3 reference images.
+
+    Reference images are not limited to style guidance: the prompt can instruct
+    the model to preserve and include a referenced object/subject inside the
+    generated image (optionally with modifications).
+    """
+    return _generate_with_body(
+        body=build_reference_request_body(
+            prompt,
+            reference_images,
+            aspect_ratio=aspect_ratio,
+            generation_config=generation_config,
+        ),
+        model_id=model_id,
+        base_url=base_url,
+        api_key=api_key,
+    )
+
+
+def generate_image_with_references_resized(  # pylint: disable=too-many-arguments
+    *,
+    prompt: str,
+    reference_images: List[Tuple[str, str]],
+    max_width: int,
+    max_height: int,
+    aspect_ratio: Optional[str] = None,
+    model_id: Optional[str] = None,
+    output_format: Optional[str] = None,
+    quality: int = 85,
+    base_url: str = DEFAULT_BASE_URL,
+    api_key: Optional[str] = None,
+    generation_config: Optional[Dict[str, Any]] = None,
+) -> ImageResult:
+    """Generate an image from prompt + references, then resize/compress."""
+    original = generate_image_with_references(
+        prompt=prompt,
+        reference_images=reference_images,
+        aspect_ratio=aspect_ratio,
+        model_id=model_id,
+        base_url=base_url,
+        api_key=api_key,
+        generation_config=generation_config,
+    )
+
+    resized_buffer, mime = _resize_image_buffer(
+        original.buffer,
+        max_width=max_width,
+        max_height=max_height,
+        output_format=output_format,
+        quality=quality,
+    )
+
+    return ImageResult(
+        buffer=resized_buffer,
+        mime_type=mime,
+        response=original.response,
+        source_url=original.source_url,
+    )
 
 
 def write_image_to_file(buffer: bytes, target_path: "Path | str") -> Path:
@@ -872,3 +988,8 @@ def write_image_to_file(buffer: bytes, target_path: "Path | str") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(buffer)
     return path
+
+
+# Public exports (include _state for test access)
+__all__ = [name for name in globals() if not name.startswith("_")]
+__all__.append("_state")
