@@ -29,13 +29,18 @@ A high-quality [Model Context Protocol (MCP)](https://modelcontextprotocol.io) s
 | `set_image_model` | Select which model to use for generation |
 | `get_current_image_model` | Check which model is currently selected |
 | `generate_image_from_prompt` | Generate images from text descriptions |
+| `generate_image_resized_from_prompt` | Generate an image then resize/compress to target bounds |
 | `save_image_to_file` | Save generated images to the filesystem |
 | `generate_and_save_image` | Generate and save in a single operation |
+| `generate_and_save_image_resized` | Generate, resize/compress, and save an optimized output |
+| `convert_image` | Convert formats (png, jpeg, webp, heic/heif, ico) with favicon sizing |
 
 ## 🔧 Prerequisites
 
 - **Python 3.9+** (uses standard library features available in 3.9+)
 - **Google AI API Key** ([Get one here](https://aistudio.google.com/apikey))
+- **Pillow** (installed automatically via `requirements.txt` for resizing/optimization)
+- **pillow-heif** (installed via `requirements.txt` for HEIC/HEIF support)
 - An MCP-compatible client (Claude Desktop, VS Code with Copilot, etc.)
 
 ## 🚀 Quick Start
@@ -299,6 +304,95 @@ Generate an image and save it to a file in one operation.
 }
 ```
 
+---
+
+### `generate_image_resized_from_prompt`
+
+Generate an image, then resize/compress it to fit within given dimensions.
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `prompt` | string | ✅ | Detailed text description of the image |
+| `max_width` | integer | ✅ | Target max width in pixels |
+| `max_height` | integer | ✅ | Target max height in pixels |
+| `aspect_ratio` | string | ❌ | One of the supported aspect ratios |
+| `model` | string | ❌ | Override the current model |
+| `format` | string | ❌ | Output format (`png`, `jpeg`, `webp`; defaults to source/PNG) |
+| `quality` | integer | ❌ | Quality 1-100 (applies to JPEG/WEBP) |
+
+**Returns:**
+```json
+{
+  "success": true,
+  "image_base64": "iVBORw0KGgo...",
+  "mime_type": "image/jpeg",
+  "extension": ".jpg",
+  "size_bytes": 123456,
+  "model_used": "gemini-3-pro-image-preview",
+  "resized": true,
+  "max_width": 1024,
+  "max_height": 1024
+}
+```
+
+---
+
+### `generate_and_save_image_resized`
+
+Generate an image, resize/compress it, and save to disk (kept separate from the high-res save path).
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `prompt` | string | ✅ | Detailed text description of the image |
+| `output_path` | string | ✅ | File path to save; extension inferred if missing |
+| `max_width` | integer | ✅ | Target max width in pixels |
+| `max_height` | integer | ✅ | Target max height in pixels |
+| `aspect_ratio` | string | ❌ | One of the supported aspect ratios |
+| `model` | string | ❌ | Override the current model |
+| `format` | string | ❌ | Output format (`png`, `jpeg`, `webp`; defaults to source/PNG) |
+| `quality` | integer | ❌ | Quality 1-100 (applies to JPEG/WEBP) |
+
+**Returns:**
+```json
+{
+  "success": true,
+  "saved_path": "/absolute/path/to/image.jpg",
+  "mime_type": "image/jpeg",
+  "size_bytes": 123456,
+  "model_used": "gemini-3-pro-image-preview",
+  "resized": true,
+  "max_width": 1024,
+  "max_height": 1024
+}
+```
+
+---
+
+### `convert_image`
+
+Convert an image to another format, optionally emitting multi-size ICOs for favicons.
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `input_path` | string | ✅ | Source image path |
+| `output_path` | string | ✅ | Destination path (extension may be inferred from `format`) |
+| `format` | string | ✅ | One of `png`, `jpeg`/`jpg`, `webp`, `heic`/`heif`, `ico` |
+| `sizes` | array<int> | ❌ | For ICO: list of sizes (e.g., `[16,32,48,64,128]`); ignored for other formats |
+
+**Returns:**
+```json
+{
+  "success": true,
+  "saved_path": "/absolute/path/to/favicon.ico",
+  "mime_type": "image/x-icon",
+  "sizes": [16,32,48,64,128],
+  "format": "ico"
+}
+```
+
 ## 💡 Usage Examples
 
 Once the server is connected to your AI assistant, you can use natural language:
@@ -335,7 +429,50 @@ imagen-mcp/
 ├── LICENSE                  # MIT License
 ├── README.md                # This file
 └── CONTRIBUTING.md          # Contribution guidelines
+├── vscode-extension/        # VS Code extension to manage MCP config
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/extension.ts
 ```
+
+## 🧩 VS Code Extension (Optional)
+
+You can manage the MCP server from inside VS Code via the bundled extension.
+
+### Build & Install
+
+#### For End Users (Marketplace install — auto updates)
+
+- Install from the VS Code Marketplace (search “Imagen MCP Server”). Marketplace installs auto-update with new releases.
+- After install: run the commands below to set your API key and model.
+
+#### For Manual / VSIX Install
+
+1. `cd vscode-extension`
+2. `npm install`
+3. `npm run package` (creates `imagen-mcp-vscode-<version>.vsix`)
+4. In VS Code, run “Extensions: Install from VSIX...” and pick the `.vsix` (updates require installing the new VSIX).
+
+#### For Contributors (publish a release)
+
+1. Set `publisher` in `vscode-extension/package.json` (already `gramini-consulting`).
+2. Set `VSCE_PAT` (Personal Access Token with Marketplace publish rights).
+3. `cd vscode-extension && npm install && npm run package && npx vsce publish` (bumps version before publish as needed).
+4. Tag the release in GitHub and attach the `.vsix` for non-marketplace installs.
+
+### Commands (Command Palette)
+
+- **Imagen MCP: Set API Key** – stored securely in VS Code Secret Storage.
+- **Imagen MCP: Select Model** – updates workspace setting `imagenMcp.modelId` (default `gemini-3-pro-image-preview`).
+- **Imagen MCP: Generate MCP Config** – writes `.vscode/mcp.json` wiring the server command/args and env (`GOOGLE_AI_API_KEY` from secrets, `IMAGEN_MODEL_ID` from settings, falls back to built-in default).
+
+### Extension Settings
+
+- `imagenMcp.modelId` (default `gemini-3-pro-image-preview`)
+- `imagenMcp.serverCommand` (default `python`)
+- `imagenMcp.serverArgs` (default `["${workspaceFolder}/run_server.py"]`)
+
+Tip: set `imagenMcp.serverCommand` to `./run_with_venv.sh` if you prefer the helper script; arguments are typically empty in that case.
 
 ## 🛡️ Security Considerations
 

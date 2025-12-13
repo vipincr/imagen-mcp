@@ -1,0 +1,11 @@
+node_modules
+src
+*.ts
+*.map
+.vscode
+.git
+.gitignore
+npm-debug.log
+.eslintcache
+**/*.test.*
+**/__tests__/**

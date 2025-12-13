@@ -1,0 +1,87 @@
+{
+  "name": "imagen-mcp-vscode",
+  "displayName": "Imagen MCP Server",
+  "description": "Manage and configure the Imagen MCP server from VS Code, including API key and model selection.",
+  "version": "0.1.9",
+  "publisher": "gramini-consulting",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/imagen-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/imagen-mcp/issues"
+  },
+  "homepage": "https://github.com/your-org/imagen-mcp",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "license": "MIT",
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "icon": "media/icon.png",
+  "activationEvents": [
+    "onCommand:imagenMcp.setApiKey",
+    "onCommand:imagenMcp.setModel",
+    "onCommand:imagenMcp.writeMcpConfig",
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "imagenMcp.setApiKey",
+        "title": "Imagen MCP: Set API Key"
+      },
+      {
+        "command": "imagenMcp.setModel",
+        "title": "Imagen MCP: Select Model"
+      },
+      {
+        "command": "imagenMcp.writeMcpConfig",
+        "title": "Imagen MCP: Generate MCP Config"
+      }
+    ],
+    "configuration": {
+      "title": "Imagen MCP Server",
+      "properties": {
+        "imagenMcp.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional: Google AI API key to sync into secret storage and mcp.json env. Stored in settings as plain text."
+        },
+        "imagenMcp.modelId": {
+          "type": "string",
+          "default": "gemini-3-pro-image-preview",
+          "description": "Default model to use for image generation."
+        },
+        "imagenMcp.serverCommand": {
+          "type": "string",
+          "default": "${workspaceFolder}/run_with_venv.sh",
+          "description": "Command to start the MCP server (defaults to the bundled run_with_venv.sh for auto-venv setup)."
+        },
+        "imagenMcp.serverArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Arguments passed to the MCP server command (unused when using run_with_venv.sh)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "lint": "echo 'no lint configured'",
+    "package": "node ./scripts/bump-version.js && mkdir -p ../build && npx vsce package --out ../build",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.1",
+    "@types/vscode": "^1.95.0",
+    "typescript": "^5.6.3",
+    "vscode": "^1.1.37",
+    "@vscode/vsce": "^3.7.1"
+  }
+}

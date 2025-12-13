@@ -1,7 +1,7 @@
 # Imagen MCP Server Dependencies
 # 
-# This project uses minimal dependencies to ensure broad compatibility.
-# The only external dependency is FastMCP for the MCP protocol implementation.
-# All other functionality uses Python standard library.
+# FastMCP for MCP protocol implementation; Pillow for image resizing/optimization; pillow-heif for HEIC support.
 
 fastmcp>=2.0.0
+Pillow>=10.4.0
+pillow-heif>=0.18.0
