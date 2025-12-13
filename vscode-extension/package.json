@@ -2,7 +2,7 @@
   "name": "imagen-mcp-vscode",
   "displayName": "Imagen MCP Server",
   "description": "Manage and configure the Imagen MCP server from VS Code, including API key and model selection.",
-  "version": "0.1.9",
+  "version": "0.1.11",
   "publisher": "gramini-consulting",
   "repository": {
     "type": "git",
@@ -25,6 +25,7 @@
     "onCommand:imagenMcp.setApiKey",
     "onCommand:imagenMcp.setModel",
     "onCommand:imagenMcp.writeMcpConfig",
+    "onCommand:imagenMcp.reinstallEnvironment",
     "onStartupFinished"
   ],
   "contributes": {
@@ -40,6 +41,10 @@
       {
         "command": "imagenMcp.writeMcpConfig",
         "title": "Imagen MCP: Generate MCP Config"
+      },
+      {
+        "command": "imagenMcp.reinstallEnvironment",
+        "title": "Imagen MCP: Reinstall Python Environment"
       }
     ],
     "configuration": {
@@ -54,19 +59,6 @@
           "type": "string",
           "default": "gemini-3-pro-image-preview",
           "description": "Default model to use for image generation."
-        },
-        "imagenMcp.serverCommand": {
-          "type": "string",
-          "default": "${workspaceFolder}/run_with_venv.sh",
-          "description": "Command to start the MCP server (defaults to the bundled run_with_venv.sh for auto-venv setup)."
-        },
-        "imagenMcp.serverArgs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "description": "Arguments passed to the MCP server command (unused when using run_with_venv.sh)."
         }
       }
     }

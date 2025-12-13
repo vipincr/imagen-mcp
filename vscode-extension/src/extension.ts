@@ -1,13 +1,20 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
+import * as cp from "child_process";
+import * as os from "os";
 
 const SERVER_ID = "imagen";
 const API_KEY_SECRET = "imagenMcp.apiKey";
 const DEFAULT_MODEL = "gemini-3-pro-image-preview";
-const DEFAULT_SCRIPT = "run_with_venv.sh";
-const LEGACY_CMD = "python";
-const LEGACY_ARGS = ["${workspaceFolder}/run_server.py"];
+const VENV_DIR_NAME = ".imagen-venv";
+
+// Python dependencies needed by the server
+const PYTHON_DEPENDENCIES = [
+  "fastmcp>=2.0.0",
+  "Pillow>=10.4.0",
+  "pillow-heif>=0.18.0",
+];
 
 function getWorkspaceRoot(): string | undefined {
   const folder = vscode.workspace.workspaceFolders?.[0];
@@ -25,30 +32,177 @@ function getConfiguredApiKey(): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-async function ensureExecutableIfNeeded(command: string, root: string) {
-  const resolved = command.replace("${workspaceFolder}", root);
-  const scriptName = path.basename(resolved);
-  if (scriptName !== DEFAULT_SCRIPT) {
-    return;
+/**
+ * Get the path to the extension's bundled server directory.
+ */
+function getBundledServerPath(context: vscode.ExtensionContext): string {
+  return path.join(context.extensionPath, "server");
+}
+
+/**
+ * Get the path where we store the virtual environment.
+ * Uses VS Code's global storage path so it persists across workspaces.
+ */
+function getVenvPath(context: vscode.ExtensionContext): string {
+  return path.join(context.globalStorageUri.fsPath, VENV_DIR_NAME);
+}
+
+/**
+ * Get the Python executable path within the virtual environment.
+ */
+function getVenvPython(context: vscode.ExtensionContext): string {
+  const venvPath = getVenvPath(context);
+  const isWindows = os.platform() === "win32";
+  return isWindows
+    ? path.join(venvPath, "Scripts", "python.exe")
+    : path.join(venvPath, "bin", "python");
+}
+
+/**
+ * Find a Python 3 interpreter on the system.
+ */
+async function findPython3(): Promise<string | undefined> {
+  const candidates = os.platform() === "win32"
+    ? ["python", "python3", "py -3"]
+    : ["python3", "python"];
+  
+  for (const candidate of candidates) {
+    try {
+      const result = await execCommand(`${candidate} --version`);
+      if (result.includes("Python 3")) {
+        return candidate.split(" ")[0]; // Return just "python3" or "python", not "py -3"
+      }
+    } catch {
+      // Try next candidate
+    }
   }
+  return undefined;
+}
+
+/**
+ * Execute a command and return stdout.
+ */
+function execCommand(command: string, cwd?: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    cp.exec(command, { cwd, timeout: 120000 }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`${error.message}\n${stderr}`));
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
+}
+
+/**
+ * Check if the virtual environment exists and is valid.
+ */
+async function isVenvValid(context: vscode.ExtensionContext): Promise<boolean> {
+  const pythonPath = getVenvPython(context);
   try {
-    await fs.promises.access(resolved, fs.constants.F_OK);
-    await fs.promises.chmod(resolved, 0o755);
+    await fs.promises.access(pythonPath, fs.constants.X_OK);
+    return true;
   } catch {
-    // Silently ignore if script missing; user may have custom command.
+    return false;
   }
 }
 
-async function maybeMigrateLegacyServerConfig(config: vscode.WorkspaceConfiguration): Promise<boolean> {
-  const cmd = config.get<string>("imagenMcp.serverCommand");
-  const args = config.get<string[]>("imagenMcp.serverArgs") || [];
-  const isLegacy = cmd === LEGACY_CMD && JSON.stringify(args) === JSON.stringify(LEGACY_ARGS);
-  if (!isLegacy) {
+/**
+ * Check if a marker file indicates dependencies are installed.
+ */
+async function areDependenciesInstalled(context: vscode.ExtensionContext): Promise<boolean> {
+  const markerPath = path.join(getVenvPath(context), ".deps-installed");
+  try {
+    await fs.promises.access(markerPath, fs.constants.F_OK);
+    return true;
+  } catch {
     return false;
   }
-  await config.update("imagenMcp.serverCommand", "${workspaceFolder}/" + DEFAULT_SCRIPT, vscode.ConfigurationTarget.Workspace);
-  await config.update("imagenMcp.serverArgs", [], vscode.ConfigurationTarget.Workspace);
-  return true;
+}
+
+/**
+ * Write a marker file to indicate dependencies are installed.
+ */
+async function markDependenciesInstalled(context: vscode.ExtensionContext): Promise<void> {
+  const markerPath = path.join(getVenvPath(context), ".deps-installed");
+  await fs.promises.writeFile(markerPath, new Date().toISOString(), "utf8");
+}
+
+/**
+ * Ensure the Python environment is set up with all dependencies.
+ */
+async function ensurePythonEnvironment(context: vscode.ExtensionContext): Promise<boolean> {
+  const venvPath = getVenvPath(context);
+  const pythonPath = getVenvPython(context);
+
+  // Ensure global storage directory exists
+  await fs.promises.mkdir(context.globalStorageUri.fsPath, { recursive: true });
+
+  // Check if venv already exists and is valid
+  if (await isVenvValid(context) && await areDependenciesInstalled(context)) {
+    return true;
+  }
+
+  // Find Python 3
+  const systemPython = await findPython3();
+  if (!systemPython) {
+    vscode.window.showErrorMessage(
+      "Python 3 is required but not found. Please install Python 3 and try again."
+    );
+    return false;
+  }
+
+  // Show progress while setting up
+  return vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: "Imagen MCP: Setting up Python environment...",
+      cancellable: false,
+    },
+    async (progress) => {
+      try {
+        // Create virtual environment if needed
+        if (!(await isVenvValid(context))) {
+          progress.report({ message: "Creating virtual environment..." });
+          await execCommand(`${systemPython} -m venv "${venvPath}"`);
+        }
+
+        // Upgrade pip
+        progress.report({ message: "Upgrading pip..." });
+        await execCommand(`"${pythonPath}" -m pip install --upgrade pip`);
+
+        // Install dependencies
+        progress.report({ message: "Installing dependencies..." });
+        for (const dep of PYTHON_DEPENDENCIES) {
+          await execCommand(`"${pythonPath}" -m pip install "${dep}"`);
+        }
+
+        // Mark dependencies as installed
+        await markDependenciesInstalled(context);
+
+        vscode.window.showInformationMessage("Imagen MCP: Python environment ready.");
+        return true;
+      } catch (error) {
+        vscode.window.showErrorMessage(
+          `Imagen MCP: Failed to set up Python environment: ${error}`
+        );
+        return false;
+      }
+    }
+  );
+}
+
+/**
+ * Get the server command and args for the MCP config.
+ * Uses the bundled server from the extension.
+ */
+function getServerConfig(context: vscode.ExtensionContext): { command: string; args: string[] } {
+  const pythonPath = getVenvPython(context);
+  const serverPath = path.join(getBundledServerPath(context), "run_server.py");
+  return {
+    command: pythonPath,
+    args: [serverPath],
+  };
 }
 
 async function syncApiKeyFromSettings(context: vscode.ExtensionContext): Promise<string | undefined> {
@@ -130,6 +284,27 @@ async function writeMcpConfig(context: vscode.ExtensionContext) {
   await ensureMcpConfig(context, { force: true, notify: true });
 }
 
+/**
+ * Reinstall the Python environment from scratch.
+ */
+async function reinstallEnvironment(context: vscode.ExtensionContext) {
+  const venvPath = getVenvPath(context);
+  
+  // Remove existing venv
+  try {
+    await fs.promises.rm(venvPath, { recursive: true, force: true });
+  } catch {
+    // Ignore errors if directory doesn't exist
+  }
+  
+  // Reinstall
+  const success = await ensurePythonEnvironment(context);
+  if (success) {
+    // Regenerate MCP config with new paths
+    await ensureMcpConfig(context, { force: true, notify: true });
+  }
+}
+
 async function ensureMcpConfig(
   context: vscode.ExtensionContext,
   options: { force?: boolean; notify?: boolean } = {}
@@ -143,26 +318,47 @@ async function ensureMcpConfig(
   const vscodeDir = path.join(root, ".vscode");
   const mcpPath = path.join(vscodeDir, "mcp.json");
 
-  const initialConfig = vscode.workspace.getConfiguration();
-  const migrated = await maybeMigrateLegacyServerConfig(initialConfig);
-  const config = migrated ? vscode.workspace.getConfiguration() : initialConfig;
-
-  const apiKey = await getApiKey(context.secrets);
-  const modelId = config.get<string>("imagenMcp.modelId") || DEFAULT_MODEL;
-  const serverCommand = config.get<string>("imagenMcp.serverCommand") || "${workspaceFolder}/" + DEFAULT_SCRIPT;
-  const serverArgs = config.get<string[]>("imagenMcp.serverArgs") || [];
-
-  if (!options.force && fs.existsSync(mcpPath) && !migrated) {
-    return; // already present and no migration triggered
+  // Check if we need to migrate from old workspace-based config
+  let needsMigration = false;
+  if (fs.existsSync(mcpPath)) {
+    try {
+      const existing = JSON.parse(await fs.promises.readFile(mcpPath, "utf8"));
+      const imagenServer = existing?.servers?.[SERVER_ID];
+      if (imagenServer) {
+        const cmd = imagenServer.command || "";
+        // Detect old workspace-based configs that need migration
+        if (cmd.includes("${workspaceFolder}") || cmd.includes("run_with_venv.sh") || cmd.includes("run_server.py")) {
+          needsMigration = true;
+        }
+      }
+    } catch {
+      // If we can't parse, let's regenerate
+      needsMigration = true;
+    }
   }
 
-  await ensureExecutableIfNeeded(serverCommand, root);
+  if (!options.force && !needsMigration && fs.existsSync(mcpPath)) {
+    return; // already present and doesn't need migration
+  }
+
+  // Ensure the Python environment is set up before writing the MCP config
+  const envReady = await ensurePythonEnvironment(context);
+  if (!envReady) {
+    return; // Error already shown by ensurePythonEnvironment
+  }
+
+  const config = vscode.workspace.getConfiguration();
+  const apiKey = await getApiKey(context.secrets);
+  const modelId = config.get<string>("imagenMcp.modelId") || DEFAULT_MODEL;
+
+  // Get the bundled server configuration
+  const serverConfig = getServerConfig(context);
 
   const mcpConfig = {
     servers: {
       [SERVER_ID]: {
-        command: serverCommand,
-        args: serverArgs,
+        command: serverConfig.command,
+        args: serverConfig.args,
         env: {
           ...(apiKey ? { GOOGLE_AI_API_KEY: apiKey } : {}),
           IMAGEN_MODEL_ID: modelId,
@@ -173,8 +369,12 @@ async function ensureMcpConfig(
   await fs.promises.mkdir(vscodeDir, { recursive: true });
   await fs.promises.writeFile(mcpPath, JSON.stringify(mcpConfig, null, 2), "utf8");
 
-  if (options.notify) {
-    vscode.window.showInformationMessage(`MCP config written to ${mcpPath}`);
+  if (options.notify || needsMigration) {
+    vscode.window.showInformationMessage(
+      needsMigration 
+        ? `Imagen MCP config migrated to use bundled server: ${mcpPath}` 
+        : `MCP config written to ${mcpPath}`
+    );
   }
 }
 
@@ -189,6 +389,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("imagenMcp.setApiKey", () => setApiKey(context)),
     vscode.commands.registerCommand("imagenMcp.setModel", () => setModel(context, status)),
     vscode.commands.registerCommand("imagenMcp.writeMcpConfig", () => writeMcpConfig(context)),
+    vscode.commands.registerCommand("imagenMcp.reinstallEnvironment", () => reinstallEnvironment(context)),
     status
   );
 
