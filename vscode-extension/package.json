@@ -2,7 +2,7 @@
   "name": "imagen-mcp-vscode",
   "displayName": "Imagen MCP Server",
   "description": "Manage and configure the Imagen MCP server from VS Code, including API key and model selection.",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "publisher": "gramini-consulting",
   "repository": {
     "type": "git",
