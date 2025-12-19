@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from image_generator import core
+from imagen_mcp import core
 
 
 class ModelFallbackTests(unittest.TestCase):
@@ -66,7 +66,7 @@ class ImageGenerationTests(unittest.TestCase):
             ]
         }
 
-    @patch("image_generator.core._http_post_json")
+    @patch("imagen_mcp.core._http_post_json")
     def test_generate_image_uses_explicit_model(self, mock_post):
         data_b64 = base64.b64encode(b"pngdata").decode("utf-8")
         mock_post.return_value = self._inline_response("image/png", data_b64)
@@ -78,7 +78,7 @@ class ImageGenerationTests(unittest.TestCase):
         self.assertEqual(result.mime_type, "image/png")
         self.assertEqual(result.buffer, base64.b64decode(data_b64))
 
-    @patch("image_generator.core._http_post_json")
+    @patch("imagen_mcp.core._http_post_json")
     def test_edit_image_sends_prompt_and_image(self, mock_post):
         data_b64 = base64.b64encode(b"pngdata").decode("utf-8")
         mock_post.return_value = self._inline_response("image/png", data_b64)

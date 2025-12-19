@@ -14,6 +14,11 @@ from urllib import error, request
 # Environment variable name for the Google AI API key
 API_KEY_ENV = "GOOGLE_AI_API_KEY"
 
+# Optional keyring fallback: when used via the VS Code extension, the key may be
+# written to the OS keychain using python-keyring.
+_DEFAULT_KEYRING_SERVICE = "imagen-mcp-vscode"
+_DEFAULT_KEYRING_ACCOUNT = "GOOGLE_AI_API_KEY"
+
 # Look for .env in the project root (parent directory of this file's parent)
 DOTENV_CANDIDATES = [
     Path(__file__).resolve().parents[1] / ".env",
@@ -111,7 +116,27 @@ _prime_dotenv_env()
 
 def get_api_key(api_key: Optional[str] = None) -> Optional[str]:
     """Get the API key from parameter or environment. Returns None if not set."""
-    return api_key or os.getenv(API_KEY_ENV)
+    key = api_key or os.getenv(API_KEY_ENV)
+    if key:
+        return key
+
+    # Best-effort keyring lookup (optional dependency).
+    service = os.getenv("IMAGEN_MCP_KEYRING_SERVICE") or _DEFAULT_KEYRING_SERVICE
+    account = os.getenv("IMAGEN_MCP_KEYRING_ACCOUNT") or _DEFAULT_KEYRING_ACCOUNT
+    try:
+        import keyring  # type: ignore
+        from keyring.errors import KeyringError  # type: ignore
+    except (ImportError, ModuleNotFoundError):
+        return None
+
+    try:
+        stored = keyring.get_password(service, account)
+    except KeyringError:
+        return None
+
+    if stored and stored.strip():
+        return stored.strip()
+    return None
 
 
 def require_api_key(api_key: Optional[str] = None) -> str:
@@ -119,7 +144,8 @@ def require_api_key(api_key: Optional[str] = None) -> str:
     key = get_api_key(api_key)
     if not key:
         raise ValueError(
-            f"Missing API key. Set the {API_KEY_ENV} environment variable or provide it in the MCP configuration."
+            f"Missing API key. Set the {API_KEY_ENV} environment variable, provide it in the MCP configuration, "
+            "or store it in the OS keychain (via the VS Code extension)."
         )
     return key
 

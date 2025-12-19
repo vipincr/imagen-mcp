@@ -456,21 +456,26 @@ Once the server is connected to your AI assistant, you can use natural language:
 
 ```
 imagen-mcp/
-├── image_generator/
-│   ├── __init__.py          # Package initialization
+├── imagen_mcp/              # Main package (renamed from image_generator)
+│   ├── __init__.py          # Package initialization & public API
 │   ├── core.py              # Core image generation & model listing logic
 │   └── server.py            # MCP server implementation with tools
-├── run_server.py            # Server entry point
-├── run_with_venv.sh         # Helper script for venv
-├── requirements.txt         # Python dependencies (minimal)
-├── .env.example             # Example environment configuration
+├── run_server.py            # Standalone server entry point
+├── pyproject.toml           # Python package configuration
+├── requirements.txt         # Python dependencies
 ├── LICENSE                  # MIT License
 ├── README.md                # This file
-└── CONTRIBUTING.md          # Contribution guidelines
-├── vscode-extension/        # VS Code extension to manage MCP config
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── src/extension.ts
+├── CONTRIBUTING.md          # Contribution guidelines
+└── vscode-extension/        # VS Code extension to manage MCP config
+    ├── package.json
+    ├── tsconfig.json
+    ├── src/extension.ts     # Extension implementation
+    ├── scripts/
+    │   ├── copy-server.js   # Copies imagen_mcp to server/ during build
+    │   └── bump-version.js  # Version management
+    └── server/               # Bundled server code (generated during build)
+        ├── imagen_mcp/       # Copied from root during build
+        └── run_server.py    # Extension entry point
 ```
 
 ## 🧩 VS Code Extension (Optional)

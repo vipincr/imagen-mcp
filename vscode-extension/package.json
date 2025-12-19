@@ -2,7 +2,7 @@
   "name": "imagen-mcp-vscode",
   "displayName": "Imagen MCP Server",
   "description": "Manage and configure the Imagen MCP server from VS Code, including API key and model selection.",
-  "version": "0.1.14",
+  "version": "0.1.32",
   "publisher": "gramini-consulting",
   "repository": {
     "type": "git",
@@ -22,10 +22,6 @@
   "main": "./out/extension.js",
   "icon": "media/icon.png",
   "activationEvents": [
-    "onCommand:imagenMcp.setApiKey",
-    "onCommand:imagenMcp.setModel",
-    "onCommand:imagenMcp.writeMcpConfig",
-    "onCommand:imagenMcp.reinstallEnvironment",
     "onStartupFinished"
   ],
   "contributes": {
@@ -50,11 +46,6 @@
     "configuration": {
       "title": "Imagen MCP Server",
       "properties": {
-        "imagenMcp.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Optional: Google AI API key to sync into secret storage and mcp.json env. Stored in settings as plain text."
-        },
         "imagenMcp.modelId": {
           "type": "string",
           "default": "gemini-3-pro-image-preview",

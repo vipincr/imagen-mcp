@@ -5,9 +5,11 @@ import * as cp from "child_process";
 import * as os from "os";
 
 const SERVER_ID = "imagen";
-const API_KEY_SECRET = "imagenMcp.apiKey";
 const DEFAULT_MODEL = "gemini-3-pro-image-preview";
 const VENV_DIR_NAME = ".imagen-venv";
+
+const API_KEY_INPUT_BASE_ID = "imagen-google-ai-api-key";
+const API_KEY_INPUT_VERSION_KEY = "imagenMcp.apiKeyInputVersion";
 
 // Python dependencies needed by the server
 const PYTHON_DEPENDENCIES = [
@@ -21,16 +23,67 @@ function getWorkspaceRoot(): string | undefined {
   return folder?.uri.fsPath;
 }
 
-async function getApiKey(secretStorage: vscode.SecretStorage): Promise<string | undefined> {
-  return secretStorage.get(API_KEY_SECRET);
+function getApiKeyInputId(context: vscode.ExtensionContext): string {
+  const version = context.globalState.get<number>(API_KEY_INPUT_VERSION_KEY, 1);
+  return `${API_KEY_INPUT_BASE_ID}-v${version}`;
 }
 
-function getConfiguredApiKey(): string | undefined {
-  const config = vscode.workspace.getConfiguration();
-  const raw = config.get<string>("imagenMcp.apiKey");
-  const trimmed = raw?.trim();
-  return trimmed ? trimmed : undefined;
+async function bumpApiKeyInputId(context: vscode.ExtensionContext): Promise<string> {
+  const current = context.globalState.get<number>(API_KEY_INPUT_VERSION_KEY, 1);
+  const next = current + 1;
+  await context.globalState.update(API_KEY_INPUT_VERSION_KEY, next);
+  return `${API_KEY_INPUT_BASE_ID}-v${next}`;
 }
+
+function getWorkspaceMcpPath(): string | undefined {
+  const root = getWorkspaceRoot();
+  if (!root) return undefined;
+  return path.join(root, ".vscode", "mcp.json");
+}
+
+function getWorkspaceSettingsPath(): string | undefined {
+  const root = getWorkspaceRoot();
+  if (!root) return undefined;
+  return path.join(root, ".vscode", "settings.json");
+}
+
+function cleanupLeakedKeysSync(): void {
+  // Best-effort cleanup of previously leaked keys in workspace files.
+  // Must not throw during activation.
+  try {
+    const mcpPath = getWorkspaceMcpPath();
+    if (mcpPath && fs.existsSync(mcpPath)) {
+      const raw = fs.readFileSync(mcpPath, "utf8");
+      const json = JSON.parse(raw);
+      const imagenServer = json?.servers?.[SERVER_ID];
+      if (imagenServer?.env?.GOOGLE_AI_API_KEY) {
+        delete imagenServer.env.GOOGLE_AI_API_KEY;
+        // If env is now empty, drop it.
+        if (imagenServer.env && Object.keys(imagenServer.env).length === 0) {
+          delete imagenServer.env;
+        }
+        fs.writeFileSync(mcpPath, JSON.stringify(json, null, 2), "utf8");
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const settingsPath = getWorkspaceSettingsPath();
+    if (settingsPath && fs.existsSync(settingsPath)) {
+      const raw = fs.readFileSync(settingsPath, "utf8");
+      const json = JSON.parse(raw);
+      if (typeof json?.["imagenMcp.apiKey"] === "string" && json["imagenMcp.apiKey"].trim()) {
+        delete json["imagenMcp.apiKey"];
+        fs.writeFileSync(settingsPath, JSON.stringify(json, null, 2), "utf8");
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
 
 /**
  * Get the path to the extension's bundled server directory.
@@ -205,46 +258,21 @@ function getServerConfig(context: vscode.ExtensionContext): { command: string; a
   };
 }
 
-async function syncApiKeyFromSettings(context: vscode.ExtensionContext): Promise<string | undefined> {
-  const configured = getConfiguredApiKey();
-  if (configured) {
-    await context.secrets.store(API_KEY_SECRET, configured);
-    return configured;
-  }
-  // Keep any previously stored secret so extension updates or missing settings
-  // do not wipe the API key. Users can explicitly clear via the command or by
-  // overwriting the setting.
-  return getApiKey(context.secrets);
-}
-
 async function setApiKey(context: vscode.ExtensionContext) {
-  const apiKey = await vscode.window.showInputBox({
-    prompt: "Enter your Google AI API key",
-    password: true,
-    ignoreFocusOut: true,
-    placeHolder: "GOOGLE_AI_API_KEY"
-  });
-  if (!apiKey) {
-    return;
-  }
-  await context.secrets.store(API_KEY_SECRET, apiKey.trim());
-  await vscode.workspace.getConfiguration().update("imagenMcp.apiKey", apiKey.trim(), vscode.ConfigurationTarget.Workspace);
-  vscode.window.showInformationMessage("Imagen MCP API key saved to VS Code secrets.");
+  // We cannot programmatically overwrite VS Code's stored MCP input value.
+  // To let users correct a bad key without editing JSON, we bump the input id,
+  // causing VS Code to prompt again next time the server starts.
+  await bumpApiKeyInputId(context);
+  await ensureMcpConfig(context, { force: true, notify: true });
+  vscode.window.showInformationMessage(
+    "Imagen MCP: API key will be requested again when the server starts (key stored securely by VS Code)."
+  );
 }
 
 async function promptForApiKeyIfMissing(context: vscode.ExtensionContext) {
-  const existing = await getApiKey(context.secrets);
-  if (existing) {
-    return;
-  }
-  const choice = await vscode.window.showWarningMessage(
-    "Imagen MCP API key is not set. The server will fail without it.",
-    "Set API Key"
-  );
-  if (choice === "Set API Key") {
-    await setApiKey(context);
-    await ensureMcpConfig(context, { force: true, notify: false });
-  }
+  // VS Code will prompt for the input when the MCP server starts.
+  // We only ensure the MCP config exists.
+  await ensureMcpConfig(context, { force: false, notify: false });
 }
 
 function updateStatusBar(status: vscode.StatusBarItem) {
@@ -280,7 +308,6 @@ async function setModel(context: vscode.ExtensionContext, status: vscode.StatusB
 }
 
 async function writeMcpConfig(context: vscode.ExtensionContext) {
-  await syncApiKeyFromSettings(context);
   await ensureMcpConfig(context, { force: true, notify: true });
 }
 
@@ -348,24 +375,32 @@ async function ensureMcpConfig(
   }
 
   const config = vscode.workspace.getConfiguration();
-  const apiKey = await getApiKey(context.secrets);
   const modelId = config.get<string>("imagenMcp.modelId") || DEFAULT_MODEL;
 
   // Get the bundled server configuration
   const serverConfig = getServerConfig(context);
 
   const mcpConfig = {
+    inputs: [
+      {
+        id: getApiKeyInputId(context),
+        type: "promptString",
+        description: "Google AI API key for Imagen/Gemini image generation",
+        password: true
+      }
+    ],
     servers: {
       [SERVER_ID]: {
         command: serverConfig.command,
         args: serverConfig.args,
         env: {
-          ...(apiKey ? { GOOGLE_AI_API_KEY: apiKey } : {}),
+          GOOGLE_AI_API_KEY: "${input:" + getApiKeyInputId(context) + "}",
           IMAGEN_MODEL_ID: modelId,
         },
       },
     },
   };
+
   await fs.promises.mkdir(vscodeDir, { recursive: true });
   await fs.promises.writeFile(mcpPath, JSON.stringify(mcpConfig, null, 2), "utf8");
 
@@ -379,6 +414,9 @@ async function ensureMcpConfig(
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  // First: remove any leaked keys from workspace files (best effort).
+  cleanupLeakedKeysSync();
+
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10);
   status.text = `$(rocket) Imagen MCP`;
   status.tooltip = "Imagen MCP Server";
@@ -397,10 +435,6 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(async (event) => {
-      if (event.affectsConfiguration("imagenMcp.apiKey")) {
-        await syncApiKeyFromSettings(context);
-        await promptForApiKeyIfMissing(context);
-      }
       if (event.affectsConfiguration("imagenMcp.modelId")) {
         updateStatusBar(status);
       }
@@ -412,7 +446,6 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Auto-create MCP config if missing so the server works out of the box
   void (async () => {
-    await syncApiKeyFromSettings(context);
     await ensureMcpConfig(context, { force: false, notify: false });
     await promptForApiKeyIfMissing(context);
   })();

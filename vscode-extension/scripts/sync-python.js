@@ -3,7 +3,7 @@ const path = require('path');
 
 const workspaceRoot = path.resolve(__dirname, '..', '..');
 const extensionRoot = path.resolve(__dirname, '..');
-const packagesToCopy = ['image_generator', 'mcp_server'];
+const packagesToCopy = ['imagen_mcp'];
 
 function copyTree(src, dest) {
   if (!fs.existsSync(src)) {

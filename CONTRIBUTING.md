@@ -175,7 +175,7 @@ Any other context, mockups, or examples.
 pytest
 
 # Run with coverage
-pytest --cov=image_generator
+pytest --cov=imagen_mcp
 
 # Run specific test file
 pytest tests/test_core.py
@@ -191,7 +191,7 @@ black .
 ruff check .
 
 # Type checking with MyPy
-mypy image_generator/
+mypy imagen_mcp/
 ```
 
 ## Style Guidelines

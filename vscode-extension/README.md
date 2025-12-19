@@ -14,11 +14,11 @@ Manage and configure the Imagen MCP server from VS Code:
 ## Commands (Command Palette)
 - **Imagen MCP: Set API Key** — stores key in Secret Storage
 - **Imagen MCP: Select Model** — sets `imagenMcp.modelId`
-- **Imagen MCP: Generate MCP Config** — writes `.vscode/mcp.json` with command/args/env
+- **Imagen MCP: Generate MCP Config** — writes `.vscode/mcp.json` with command/args (does not write API keys)
 - **Imagen MCP: Reinstall Python Environment** — recreates the virtual environment (useful for troubleshooting)
 
 ## Settings
-- `imagenMcp.apiKey` (string) — optionally set your Google AI key in settings; it syncs to secret storage and `.vscode/mcp.json`. Stored in settings as plain text. You'll get a warning toast with a shortcut to set it when missing.
+- `imagenMcp.apiKey` (string) — deprecated. If set in workspace settings, it will be migrated into Secret Storage and removed to prevent leaks.
 - `imagenMcp.modelId` (default `gemini-3-pro-image-preview`)
 
 ## Installation
@@ -29,7 +29,9 @@ Manage and configure the Imagen MCP server from VS Code:
 - On activation, the extension automatically:
   1. Sets up a Python virtual environment (stored in VS Code's global storage)
   2. Installs required dependencies (fastmcp, Pillow, pillow-heif)
-  3. Creates `.vscode/mcp.json` using the bundled server and your stored API key
+  3. Creates `.vscode/mcp.json` using the bundled server (API key is never written to workspace files)
+
+The MCP server reads `GOOGLE_AI_API_KEY` from your environment, or from the OS keychain (via Python `keyring`) when you use **Imagen MCP: Set API Key**.
 
 The virtual environment is shared across all workspaces, so setup only happens once.
 
