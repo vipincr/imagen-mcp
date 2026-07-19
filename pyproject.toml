@@ -30,6 +30,14 @@ dependencies = [
     "pillow-heif>=0.18.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/vipincr/imagen-mcp"
+Repository = "https://github.com/vipincr/imagen-mcp"
+Issues = "https://github.com/vipincr/imagen-mcp/issues"
+
+[project.scripts]
+imagen-mcp = "imagen_mcp.server:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",

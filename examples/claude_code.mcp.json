@@ -1,0 +1,13 @@
+{
+  "//": "Claude Code project config. Copy to your project root as .mcp.json.",
+  "//note": "Claude Code expands ${GOOGLE_AI_API_KEY} from your environment, so the key is not stored in the file. Replace the run_mcp.py path with the absolute path to your checkout.",
+  "mcpServers": {
+    "imagen": {
+      "command": "python3",
+      "args": ["/absolute/path/to/imagen-mcp/run_mcp.py"],
+      "env": {
+        "GOOGLE_AI_API_KEY": "${GOOGLE_AI_API_KEY}"
+      }
+    }
+  }
+}

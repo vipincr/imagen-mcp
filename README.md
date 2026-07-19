@@ -114,19 +114,46 @@ python run_server.py
 
 ## 🔌 MCP Client Integration
 
+The server speaks MCP over stdio, so any MCP client can **spawn it on demand** —
+you never run a server process yourself. The recommended launch command is the
+self-bootstrapping launcher [`run_mcp.py`](run_mcp.py): the first time a client
+starts it, it creates a private virtualenv at `~/.imagen-mcp/venv`, installs this
+package, and starts the server (~0.4s on every subsequent launch). All you need
+on the machine is **Python 3** and network access for that first run.
+
+Example configs live in [`examples/`](examples/).
+
+### Claude Code
+
+**One command** (user scope — available in every project):
+
+```bash
+export GOOGLE_AI_API_KEY=your_key_here
+./scripts/add-to-claude-code.sh
+```
+
+This runs `claude mcp add imagen --scope user … -- python3 <repo>/run_mcp.py`.
+Claude Code then starts the server automatically the first time it needs an
+image tool. Verify with `claude mcp list`.
+
+**Per-project** instead: copy [`examples/claude_code.mcp.json`](examples/claude_code.mcp.json)
+to your project root as `.mcp.json` (it reads `${GOOGLE_AI_API_KEY}` from your
+environment, so no key is stored in the file).
+
 ### Claude Desktop
 
-Add to your Claude Desktop configuration file:
+Merge [`examples/claude_desktop_config.json`](examples/claude_desktop_config.json)
+into your config file, using the absolute path to your checkout and your real key:
 
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`  
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {
   "mcpServers": {
     "imagen": {
-      "command": "python",
-      "args": ["/absolute/path/to/imagen-mcp/run_server.py"],
+      "command": "python3",
+      "args": ["/absolute/path/to/imagen-mcp/run_mcp.py"],
       "env": {
         "GOOGLE_AI_API_KEY": "your_api_key_here"
       }
@@ -135,16 +162,20 @@ Add to your Claude Desktop configuration file:
 }
 ```
 
+Restart Claude Desktop; the **imagen** tools appear under the MCP tools menu.
+
 ### VS Code with GitHub Copilot
 
-Add to your VS Code MCP settings (`.vscode/mcp.json` or user settings):
+Install the bundled extension (see [VS Code Extension](#-vs-code-extension-optional)) —
+it registers the server globally and manages the API key for you, so no manual
+config is required. To wire it up by hand instead, add to `.vscode/mcp.json`:
 
 ```json
 {
   "servers": {
     "imagen": {
-      "command": "python",
-      "args": ["${workspaceFolder}/run_server.py"],
+      "command": "python3",
+      "args": ["/absolute/path/to/imagen-mcp/run_mcp.py"],
       "env": {
         "GOOGLE_AI_API_KEY": "your_api_key_here"
       }
@@ -153,18 +184,17 @@ Add to your VS Code MCP settings (`.vscode/mcp.json` or user settings):
 }
 ```
 
-Or run the VS Code command: **MCP: Open User Configuration** and add the server.
+### Using with uv
 
-### Using with uv (Recommended for Isolation)
-
-If you have [uv](https://github.com/astral-sh/uv) installed:
+If you have [uv](https://github.com/astral-sh/uv) installed, you can skip the
+bootstrap launcher and let uv manage the environment:
 
 ```json
 {
   "mcpServers": {
     "imagen": {
       "command": "uv",
-      "args": ["run", "--directory", "/path/to/imagen-mcp", "python", "run_server.py"],
+      "args": ["run", "--directory", "/path/to/imagen-mcp", "imagen-mcp"],
       "env": {
         "GOOGLE_AI_API_KEY": "your_api_key_here"
       }
@@ -172,6 +202,13 @@ If you have [uv](https://github.com/astral-sh/uv) installed:
   }
 }
 ```
+
+### API key resolution
+
+The server looks for the key in this order: the `GOOGLE_AI_API_KEY` environment
+variable (what the configs above set) ➜ the OS keychain (via `keyring`) ➜ a
+`.env` file in the repo root. Provide it whichever way suits your client; the
+env var in the MCP config is the simplest and most portable.
 
 ## 📚 Tools Reference
 

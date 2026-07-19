@@ -566,9 +566,21 @@ def convert_image(
         }
 
 
+def main() -> None:
+    """Console entry point: run the MCP server over stdio.
+
+    This is the target of the ``imagen-mcp`` console script and of
+    ``python -m imagen_mcp``. It uses the default stdio transport, which is what
+    MCP clients (Claude Desktop, Claude Code, VS Code, etc.) spawn on demand.
+    The banner and info-level logs are suppressed so nothing but JSON-RPC is
+    written to stdout.
+    """
+    mcp.run(show_banner=False, log_level="WARNING")
+
+
 # Entry point for running the server
 if __name__ == "__main__":
-    mcp.run()
+    main()
 
 
 __all__ = [name for name in globals() if not name.startswith("_")]

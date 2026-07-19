@@ -1,0 +1,15 @@
+{
+  "//": "Claude Desktop: merge this into your claude_desktop_config.json.",
+  "//path_macos": "~/Library/Application Support/Claude/claude_desktop_config.json",
+  "//path_windows": "%APPDATA%\\Claude\\claude_desktop_config.json",
+  "//note": "Replace the run_mcp.py path with the absolute path to your checkout, and set your real API key. run_mcp.py bootstraps its own virtualenv on first launch.",
+  "mcpServers": {
+    "imagen": {
+      "command": "python3",
+      "args": ["/absolute/path/to/imagen-mcp/run_mcp.py"],
+      "env": {
+        "GOOGLE_AI_API_KEY": "your_google_ai_api_key_here"
+      }
+    }
+  }
+}
