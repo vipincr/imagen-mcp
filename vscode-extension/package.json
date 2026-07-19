@@ -2,7 +2,7 @@
   "name": "imagen-mcp-vscode",
   "displayName": "Imagen MCP Server",
   "description": "Google AI (Gemini/Imagen) image generation as a Model Context Protocol server, registered globally for GitHub Copilot and any MCP client — set your API key once for every workspace.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "gramini-consulting",
   "repository": {
     "type": "git",
@@ -99,8 +99,8 @@
     "esbuild:min": "npm run esbuild -- --minify",
     "lint": "eslint src --ext ts",
     "sync-python": "node ./scripts/sync-python.js",
-    "package": "node ./scripts/bump-version.js && mkdir -p ../build && npx @vscode/vsce package --out ../build",
-    "vscode:prepublish": "npm run sync-python && npm run esbuild:min"
+    "package": "mkdir -p ../build && npx @vscode/vsce package --out ../build",
+    "vscode:prepublish": "node ./scripts/bump-version.js && npm run sync-python && npm run esbuild:min"
   },
   "devDependencies": {
     "@types/node": "^22.9.1",

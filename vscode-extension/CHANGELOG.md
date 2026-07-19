@@ -2,6 +2,15 @@
 
 All notable changes to the Imagen MCP Server extension are documented here.
 
+## [0.2.2]
+
+### Changed
+
+- Packaging now auto-increments the patch version on every build. The version
+  bump moved into the `vscode:prepublish` step, so any `vsce package` or
+  `vsce publish` (not just `npm run package`) produces a fresh version and a
+  distinctly named `.vsix`.
+
 ## [0.2.1]
 
 ### Changed
