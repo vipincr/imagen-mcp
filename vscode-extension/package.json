@@ -69,14 +69,23 @@
       "properties": {
         "imagenMcp.modelId": {
           "type": "string",
-          "default": "gemini-3-pro-image-preview",
+          "default": "gemini-3-pro-image",
           "scope": "application",
           "enum": [
+            "gemini-3-pro-image",
             "gemini-3-pro-image-preview",
+            "gemini-3.1-flash-image",
             "gemini-2.5-flash-image",
-            "gemini-2.0-flash-exp-image-generation",
-            "imagen-4.0-generate-001",
-            "imagen-4.0-ultra-generate-001"
+            "imagen-4.0-ultra-generate-001",
+            "imagen-4.0-generate-001"
+          ],
+          "enumDescriptions": [
+            "Nano Banana Pro (GA) — highest quality (default)",
+            "Nano Banana Pro (preview)",
+            "Nano Banana 2 — faster",
+            "Nano Banana — fast",
+            "Imagen 4 Ultra",
+            "Imagen 4"
           ],
           "description": "Default model used for image generation. Applies to every workspace."
         }

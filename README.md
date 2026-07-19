@@ -95,9 +95,9 @@ python run_server.py
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `GOOGLE_AI_API_KEY` | Google AI API key | ✅ Yes |
-| `IMAGEN_MODEL_ID` | Default model to use (defaults to `gemini-3-pro-image-preview`) | ❌ No |
+| `IMAGEN_MODEL_ID` | Default model to use (defaults to `gemini-3-pro-image`) | ❌ No |
 
-**Model selection fallback (highest priority first):** explicit tool parameter ➜ runtime `set_image_model` ➜ `IMAGEN_MODEL_ID` env var ➜ built-in default `gemini-3-pro-image-preview`.
+**Model selection fallback (highest priority first):** explicit tool parameter ➜ runtime `set_image_model` ➜ `IMAGEN_MODEL_ID` env var ➜ built-in default `gemini-3-pro-image`.
 
 ### Supported Aspect Ratios
 
@@ -226,7 +226,7 @@ Verify that your API key is configured and working.
   "api_key_valid": true,
   "total_models": 25,
   "image_models": 3,
-  "current_model": "gemini-3-pro-image-preview"
+  "current_model": "gemini-3-pro-image"
 }
 ```
 
@@ -244,7 +244,7 @@ Discover available image generation models for your API key.
   "success": true,
   "models": [
     {
-      "name": "gemini-3-pro-image-preview",
+      "name": "gemini-3-pro-image",
       "display_name": "Gemini 3 Pro (Image Preview)",
       "description": "Fast image generation model..."
     }
@@ -269,8 +269,8 @@ Select which model to use for image generation.
 ```json
 {
   "success": true,
-  "model": "gemini-3-pro-image-preview",
-  "message": "Model set to 'gemini-3-pro-image-preview'. Ready for image generation."
+  "model": "gemini-3-pro-image",
+  "message": "Model set to 'gemini-3-pro-image'. Ready for image generation."
 }
 ```
 
@@ -295,7 +295,7 @@ Generate an image from a text description.
   "mime_type": "image/png",
   "extension": ".png",
   "size_bytes": 1234567,
-  "model_used": "gemini-3-pro-image-preview"
+  "model_used": "gemini-3-pro-image"
 }
 ```
 
@@ -375,7 +375,7 @@ Generate an image and save it to a file in one operation.
   "saved_path": "/absolute/path/to/image.png",
   "mime_type": "image/png",
   "size_bytes": 1234567,
-  "model_used": "gemini-3-pro-image-preview"
+  "model_used": "gemini-3-pro-image"
 }
 ```
 
@@ -404,7 +404,7 @@ Generate an image, then resize/compress it to fit within given dimensions.
   "mime_type": "image/jpeg",
   "extension": ".jpg",
   "size_bytes": 123456,
-  "model_used": "gemini-3-pro-image-preview",
+  "model_used": "gemini-3-pro-image",
   "resized": true,
   "max_width": 1024,
   "max_height": 1024
@@ -436,7 +436,7 @@ Generate an image, resize/compress it, and save to disk (kept separate from the 
   "saved_path": "/absolute/path/to/image.jpg",
   "mime_type": "image/jpeg",
   "size_bytes": 123456,
-  "model_used": "gemini-3-pro-image-preview",
+  "model_used": "gemini-3-pro-image",
   "resized": true,
   "max_width": 1024,
   "max_height": 1024
@@ -475,7 +475,7 @@ Once the server is connected to your AI assistant, you can use natural language:
 ### First-Time Setup
 > "Check if my API key is configured correctly"
 > "List available image generation models"
-> "Set the model to gemini-2.0-flash-exp-image-generation"
+> "Set the model to gemini-3.1-flash-image"
 
 ### Basic Image Generation
 > "Generate a sunset over mountains with vibrant orange and purple colors"
@@ -544,7 +544,7 @@ You can manage the MCP server from inside VS Code via the bundled extension.
 
 - **Set API Key** – validated and stored once in VS Code Secret Storage (OS keychain), shared across all workspaces.
 - **Clear API Key** – removes the stored key.
-- **Select Model** – updates the application-scoped setting `imagenMcp.modelId` (default `gemini-3-pro-image-preview`).
+- **Select Model** – updates the application-scoped setting `imagenMcp.modelId` (default `gemini-3-pro-image`).
 - **Reinstall Python Environment** – rebuilds the shared virtual environment.
 
 The extension registers the MCP server **globally** via VS Code's MCP provider API
@@ -554,7 +554,7 @@ server process from Secret Storage at launch.
 
 ### Extension Settings
 
-- `imagenMcp.modelId` (application scope, default `gemini-3-pro-image-preview`) — the default image model, applied across all workspaces.
+- `imagenMcp.modelId` (application scope, default `gemini-3-pro-image`) — the default image model, applied across all workspaces.
 
 The API key is intentionally **not** a setting — it lives only in Secret Storage.
 

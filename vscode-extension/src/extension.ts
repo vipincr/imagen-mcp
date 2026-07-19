@@ -7,7 +7,7 @@ import * as os from "os";
 const SERVER_ID = "imagen";
 const SERVER_LABEL = "Imagen (Google AI)";
 const PROVIDER_ID = "imagenMcp.serverProvider";
-const DEFAULT_MODEL = "gemini-3-pro-image-preview";
+const DEFAULT_MODEL = "gemini-3-pro-image";
 const VENV_DIR_NAME = ".imagen-venv";
 
 // Global SecretStorage key for the Google AI API key. This is stored by VS Code
@@ -22,11 +22,12 @@ const PYTHON_DEPENDENCIES = [
 ];
 
 const AVAILABLE_MODELS = [
-  "gemini-3-pro-image-preview",
-  "gemini-2.5-flash-image",
-  "gemini-2.0-flash-exp-image-generation",
-  "imagen-4.0-generate-001",
-  "imagen-4.0-ultra-generate-001",
+  "gemini-3-pro-image", // Nano Banana Pro (GA) — highest quality, default
+  "gemini-3-pro-image-preview", // Nano Banana Pro (preview)
+  "gemini-3.1-flash-image", // Nano Banana 2 — faster
+  "gemini-2.5-flash-image", // Nano Banana
+  "imagen-4.0-ultra-generate-001", // Imagen 4 Ultra
+  "imagen-4.0-generate-001", // Imagen 4
 ];
 
 // ---------------------------------------------------------------------------

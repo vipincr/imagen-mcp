@@ -225,7 +225,7 @@ def set_image_model(model_name: str) -> dict:
     Use 'list_image_models' first to see available models.
 
     Args:
-        model_name: The name/ID of the model to use (e.g., "gemini-2.0-flash-exp-image-generation").
+        model_name: The name/ID of the model to use (e.g., "gemini-3.1-flash-image").
 
     Returns:
         A dictionary containing:

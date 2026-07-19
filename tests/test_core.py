@@ -152,7 +152,7 @@ class ImageEditingIntegrationTests(unittest.TestCase):
 
     def _choose_model(self):
         models = core.list_available_models(image_only=True)
-        target = next((m.name for m in models if m.name == "gemini-3-pro-image-preview"), None)
+        target = next((m.name for m in models if m.name == "gemini-3-pro-image"), None)
         return target or (models[0].name if models else None)
 
     def test_01_generate_and_edit_apple_color_only(self):

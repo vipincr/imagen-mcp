@@ -28,8 +28,10 @@ DOTENV_CANDIDATES = [
 # Default settings
 DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_MIME_TYPE = "image/png"
-# Default image model to use when none is provided or configured
-DEFAULT_MODEL_ID = "gemini-3-pro-image-preview"
+# Default image model to use when none is provided or configured.
+# gemini-3-pro-image is "Nano Banana Pro" (GA) — Google's highest-quality image
+# model. Preview and flash/lite variants remain selectable at runtime.
+DEFAULT_MODEL_ID = "gemini-3-pro-image"
 
 # Known image generation models (used for filtering)
 # These models support image generation via responseModalities: ["IMAGE"]
@@ -40,6 +42,8 @@ IMAGE_GENERATION_MODEL_PATTERNS = [
     "gemini-2.5-flash-image",
     "gemini-2.5-pro-exp-image",
     "gemini-3-pro-image",
+    "gemini-3.1-flash-image",
+    "gemini-3.1-flash-lite-image",
     "imagen-3",
     "imagen-4",
     "image-generation",

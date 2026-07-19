@@ -39,7 +39,7 @@ Get an API key from [Google AI Studio](https://aistudio.google.com/apikey).
 
 ## Settings
 
-- `imagenMcp.modelId` (application scope, default `gemini-3-pro-image-preview`) —
+- `imagenMcp.modelId` (application scope, default `gemini-3-pro-image`) —
   the default image model, applied across all workspaces.
 
 The API key is **not** a setting — it lives only in Secret Storage so it can never

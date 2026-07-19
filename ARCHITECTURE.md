@@ -65,7 +65,7 @@ MCP Response to Client
    OR
 3. Environment Variable (IMAGEN_MODEL_ID)
    OR
-4. Default (gemini-3-pro-image-preview)
+4. Default (gemini-3-pro-image)
 ```
 
 ## VS Code Extension Architecture
