@@ -1,11 +1,18 @@
-node_modules
-src
-*.ts
-*.map
-.vscode
-.git
-.gitignore
-npm-debug.log
+# Source & build tooling — not needed at runtime (esbuild bundles to dist/)
+src/**
+out/**
+scripts/**
+node_modules/**
+.github/**
+**/*.ts
+**/*.map
+tsconfig.json
+eslint.config.mjs
 .eslintcache
+.gitignore
+.vscodeignore
+npm-debug.log
 **/*.test.*
 **/__tests__/**
+
+# Keep: dist/**, server/**, media/**, package.json, README.md, LICENSE, CHANGELOG.md

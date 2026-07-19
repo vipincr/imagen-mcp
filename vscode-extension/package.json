@@ -1,46 +1,67 @@
 {
   "name": "imagen-mcp-vscode",
   "displayName": "Imagen MCP Server",
-  "description": "Manage and configure the Imagen MCP server from VS Code, including API key and model selection.",
-  "version": "0.1.32",
+  "description": "Google AI (Gemini/Imagen) image generation as a Model Context Protocol server, registered globally for GitHub Copilot and any MCP client — set your API key once for every workspace.",
+  "version": "0.2.0",
   "publisher": "gramini-consulting",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/imagen-mcp"
+    "url": "https://github.com/vipincr/imagen-mcp"
   },
   "bugs": {
-    "url": "https://github.com/your-org/imagen-mcp/issues"
+    "url": "https://github.com/vipincr/imagen-mcp/issues"
   },
-  "homepage": "https://github.com/your-org/imagen-mcp",
+  "homepage": "https://github.com/vipincr/imagen-mcp#readme",
   "engines": {
-    "vscode": "^1.95.0"
+    "vscode": "^1.101.0"
   },
   "license": "MIT",
   "categories": [
+    "AI",
+    "Chat",
     "Other"
   ],
-  "main": "./out/extension.js",
+  "keywords": [
+    "mcp",
+    "model context protocol",
+    "image generation",
+    "gemini",
+    "imagen",
+    "google ai",
+    "copilot"
+  ],
+  "main": "./dist/extension.js",
   "icon": "media/icon.png",
   "activationEvents": [
     "onStartupFinished"
   ],
   "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "imagenMcp.serverProvider",
+        "label": "Imagen (Google AI)"
+      }
+    ],
     "commands": [
       {
         "command": "imagenMcp.setApiKey",
-        "title": "Imagen MCP: Set API Key"
+        "title": "Set API Key",
+        "category": "Imagen MCP"
+      },
+      {
+        "command": "imagenMcp.clearApiKey",
+        "title": "Clear API Key",
+        "category": "Imagen MCP"
       },
       {
         "command": "imagenMcp.setModel",
-        "title": "Imagen MCP: Select Model"
-      },
-      {
-        "command": "imagenMcp.writeMcpConfig",
-        "title": "Imagen MCP: Generate MCP Config"
+        "title": "Select Model",
+        "category": "Imagen MCP"
       },
       {
         "command": "imagenMcp.reinstallEnvironment",
-        "title": "Imagen MCP: Reinstall Python Environment"
+        "title": "Reinstall Python Environment",
+        "category": "Imagen MCP"
       }
     ],
     "configuration": {
@@ -49,23 +70,37 @@
         "imagenMcp.modelId": {
           "type": "string",
           "default": "gemini-3-pro-image-preview",
-          "description": "Default model to use for image generation."
+          "scope": "application",
+          "enum": [
+            "gemini-3-pro-image-preview",
+            "gemini-2.5-flash-image",
+            "gemini-2.0-flash-exp-image-generation",
+            "imagen-4.0-generate-001",
+            "imagen-4.0-ultra-generate-001"
+          ],
+          "description": "Default model used for image generation. Applies to every workspace."
         }
       }
     }
   },
   "scripts": {
-    "compile": "tsc -p .",
-    "lint": "echo 'no lint configured'",
+    "compile": "tsc -p . --noEmit",
+    "watch": "tsc -watch -p . --noEmit",
+    "esbuild": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "esbuild:min": "npm run esbuild -- --minify",
+    "lint": "eslint src --ext ts",
     "sync-python": "node ./scripts/sync-python.js",
-    "package": "node ./scripts/bump-version.js && mkdir -p ../build && npx vsce package --out ../build",
-    "vscode:prepublish": "npm run compile && npm run sync-python"
+    "package": "node ./scripts/bump-version.js && mkdir -p ../build && npx @vscode/vsce package --out ../build",
+    "vscode:prepublish": "npm run sync-python && npm run esbuild:min"
   },
   "devDependencies": {
     "@types/node": "^22.9.1",
-    "@types/vscode": "^1.95.0",
-    "typescript": "^5.6.3",
-    "vscode": "^1.1.37",
-    "@vscode/vsce": "^3.7.1"
+    "@types/vscode": "^1.101.0",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.15.0",
+    "typescript": "^5.6.3"
   }
 }

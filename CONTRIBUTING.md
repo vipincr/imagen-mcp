@@ -32,7 +32,7 @@ This project and everyone participating in it is governed by our commitment to p
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
    ```bash
-   git clone https://github.com/your-username/imagen-mcp.git
+   git clone https://github.com/vipincr/imagen-mcp.git
    cd imagen-mcp
    ```
 3. **Set up the development environment** (see [Development Setup](#development-setup))
@@ -335,7 +335,7 @@ test(server): add unit tests for generate_image tool
 ## Questions?
 
 Feel free to:
-- Open a [GitHub Discussion](https://github.com/yourusername/imagen-mcp/discussions)
+- Open a [GitHub Discussion](https://github.com/vipincr/imagen-mcp/discussions)
 - Reach out to the maintainers
 
 ---

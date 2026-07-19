@@ -1,39 +1,75 @@
 # Imagen MCP Server (VS Code Extension)
 
-Manage and configure the Imagen MCP server from VS Code:
-- Securely store your Google AI API key (Secret Storage)
-- Pick the image model (default `gemini-3-pro-image-preview`)
-- Auto-generate `.vscode/mcp.json` so MCP works out of the box
-- Use MCP image tools including generation, editing, and generation with up to 3 reference images (references can be used as actual visual inputs per prompt)
-- **Standalone installation** — no additional files required in your workspace
+Adds a **Google AI (Gemini / Imagen) image-generation MCP server** to VS Code and
+registers it **globally** — for GitHub Copilot Chat and any other MCP client — so it
+works in **every workspace and window** without dropping any config files into your
+projects.
+
+- 🔑 **Set your API key once.** It is stored in VS Code Secret Storage (your OS
+  keychain) and reused everywhere. You are never asked again unless you clear it.
+- 🌍 **Global, not per-project.** The server is registered through VS Code's MCP
+  provider API — no `.vscode/mcp.json` is written into your workspaces.
+- 🖼️ **Image tools:** generate, edit, generate-with-references (up to 3 reference
+  images as real visual inputs), format conversion, and more.
+- 🐍 **Zero manual setup.** A private Python virtual environment is created once in
+  the extension's global storage and shared across all workspaces.
 
 ## Requirements
-- **Python 3** must be installed on your system
-- The extension automatically creates a virtual environment and installs dependencies
 
-## Commands (Command Palette)
-- **Imagen MCP: Set API Key** — stores key in Secret Storage
-- **Imagen MCP: Select Model** — sets `imagenMcp.modelId`
-- **Imagen MCP: Generate MCP Config** — writes `.vscode/mcp.json` with command/args (does not write API keys)
-- **Imagen MCP: Reinstall Python Environment** — recreates the virtual environment (useful for troubleshooting)
+- **VS Code 1.101 or newer** (the MCP server provider API).
+- **Python 3** available on your `PATH`. The extension creates and manages its own
+  virtual environment; it never touches your system or project interpreters.
+
+## Getting started
+
+1. Install the extension.
+2. Open the **MCP Servers** view (or run any Copilot Chat request that needs images).
+   The first time the **Imagen (Google AI)** server starts, you'll be prompted for
+   your Google AI API key. It's validated and saved to Secret Storage.
+3. That's it — the key and model apply to every workspace from now on.
+
+Get an API key from [Google AI Studio](https://aistudio.google.com/apikey).
+
+## Commands (Command Palette → "Imagen MCP")
+
+- **Set API Key** — enter/replace your Google AI API key (validated, stored securely).
+- **Clear API Key** — remove the stored key.
+- **Select Model** — choose the default image model (stored in global settings).
+- **Reinstall Python Environment** — rebuild the virtual environment for troubleshooting.
 
 ## Settings
-- `imagenMcp.apiKey` (string) — deprecated. If set in workspace settings, it will be migrated into Secret Storage and removed to prevent leaks.
-- `imagenMcp.modelId` (default `gemini-3-pro-image-preview`)
 
-## Installation
-- Marketplace: search **Imagen MCP Server** (auto-updates)
-- VSIX: run `npm run package` then "Install from VSIX…"
+- `imagenMcp.modelId` (application scope, default `gemini-3-pro-image-preview`) —
+  the default image model, applied across all workspaces.
 
-## Behavior
-- On activation, the extension automatically:
-  1. Sets up a Python virtual environment (stored in VS Code's global storage)
-  2. Installs required dependencies (fastmcp, Pillow, pillow-heif)
-  3. Creates `.vscode/mcp.json` using the bundled server (API key is never written to workspace files)
+The API key is **not** a setting — it lives only in Secret Storage so it can never
+leak into a settings file or a committed workspace file.
 
-The MCP server reads `GOOGLE_AI_API_KEY` from your environment, or from the OS keychain (via Python `keyring`) when you use **Imagen MCP: Set API Key**.
+## How it works
 
-The virtual environment is shared across all workspaces, so setup only happens once.
+On activation the extension registers an MCP server definition provider. When the
+server is started, the extension:
+
+1. Ensures the shared Python virtual environment exists (fastmcp, Pillow, pillow-heif).
+2. Reads your API key from Secret Storage (prompting once if missing).
+3. Launches the bundled server, passing `GOOGLE_AI_API_KEY` and `IMAGEN_MODEL_ID`
+   as environment variables — nothing is written to disk in your workspace.
+
+## Installation from VSIX
+
+```bash
+npm install
+npm run package   # builds ../build/imagen-mcp-vscode-<version>.vsix
+```
+
+Then run **Extensions: Install from VSIX…** and pick the file.
+
+## Migrating from earlier versions
+
+Older versions wrote a `.vscode/mcp.json` file into each workspace. On first run,
+this version removes the old Imagen entry (and any stored key input) from that file
+automatically. You can safely delete a now-empty `.vscode/mcp.json`.
 
 ## License
+
 MIT

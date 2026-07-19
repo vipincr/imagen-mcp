@@ -52,7 +52,7 @@ A high-quality [Model Context Protocol (MCP)](https://modelcontextprotocol.io) s
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/imagen-mcp.git
+git clone https://github.com/vipincr/imagen-mcp.git
 cd imagen-mcp
 ```
 
@@ -503,19 +503,23 @@ You can manage the MCP server from inside VS Code via the bundled extension.
 3. `cd vscode-extension && npm install && npm run package && npx vsce publish` (bumps version before publish as needed).
 4. Tag the release in GitHub and attach the `.vsix` for non-marketplace installs.
 
-### Commands (Command Palette)
+### Commands (Command Palette → "Imagen MCP")
 
-- **Imagen MCP: Set API Key** – stored securely in VS Code Secret Storage.
-- **Imagen MCP: Select Model** – updates workspace setting `imagenMcp.modelId` (default `gemini-3-pro-image-preview`).
-- **Imagen MCP: Generate MCP Config** – writes `.vscode/mcp.json` wiring the server command/args and env (`GOOGLE_AI_API_KEY` from secrets, `IMAGEN_MODEL_ID` from settings, falls back to built-in default).
+- **Set API Key** – validated and stored once in VS Code Secret Storage (OS keychain), shared across all workspaces.
+- **Clear API Key** – removes the stored key.
+- **Select Model** – updates the application-scoped setting `imagenMcp.modelId` (default `gemini-3-pro-image-preview`).
+- **Reinstall Python Environment** – rebuilds the shared virtual environment.
+
+The extension registers the MCP server **globally** via VS Code's MCP provider API
+(`vscode.lm.registerMcpServerDefinitionProvider`, VS Code 1.101+). It does **not**
+write `.vscode/mcp.json` into your workspaces; the API key is injected into the
+server process from Secret Storage at launch.
 
 ### Extension Settings
 
-- `imagenMcp.modelId` (default `gemini-3-pro-image-preview`)
-- `imagenMcp.serverCommand` (default `python`)
-- `imagenMcp.serverArgs` (default `["${workspaceFolder}/run_server.py"]`)
+- `imagenMcp.modelId` (application scope, default `gemini-3-pro-image-preview`) — the default image model, applied across all workspaces.
 
-Tip: set `imagenMcp.serverCommand` to `./run_with_venv.sh` if you prefer the helper script; arguments are typically empty in that case.
+The API key is intentionally **not** a setting — it lives only in Secret Storage.
 
 ## 🛡️ Security Considerations
 
@@ -595,8 +599,8 @@ copies or substantial portions of the Software.
 
 ## 📬 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/imagen-mcp/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/imagen-mcp/discussions)
+- **Issues**: [GitHub Issues](https://github.com/vipincr/imagen-mcp/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/vipincr/imagen-mcp/discussions)
 
 ---
 

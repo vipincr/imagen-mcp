@@ -1,0 +1,44 @@
+name: Extension CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "vscode-extension/**"
+      - "imagen_mcp/**"
+      - ".github/workflows/extension-ci.yml"
+  pull_request:
+    paths:
+      - "vscode-extension/**"
+      - "imagen_mcp/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Type-check
+        run: npm run compile
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Sync Python server
+        run: npm run sync-python
+
+      - name: Bundle
+        run: npm run esbuild:min
+
+      - name: Package VSIX
+        run: npx @vscode/vsce package --out ../build --no-git-tag-version
