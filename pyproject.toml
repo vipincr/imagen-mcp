@@ -12,16 +12,30 @@ license = {text = "MIT"}
 authors = [
     {name = "Vipin Ravindran"}
 ]
-keywords = ["mcp", "model-context-protocol", "image-generation", "gemini", "imagen"]
+keywords = [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "image-generation",
+    "text-to-image",
+    "gemini",
+    "imagen",
+    "google-ai",
+    "nano-banana",
+    "ai",
+]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 
 dependencies = [

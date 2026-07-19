@@ -1,0 +1,46 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.vipincr/imagen-mcp",
+  "title": "Imagen (Google AI)",
+  "description": "Generate, edit & convert images with Google Gemini and Imagen models over MCP.",
+  "version": "1.0.0",
+  "websiteUrl": "https://github.com/vipincr/imagen-mcp#readme",
+  "repository": {
+    "url": "https://github.com/vipincr/imagen-mcp",
+    "source": "github",
+    "id": "1115516743"
+  },
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/vipincr/imagen-mcp/main/vscode-extension/media/icon.png",
+      "mimeType": "image/png",
+      "sizes": ["128x128"]
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "imagen-mcp",
+      "version": "1.0.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "GOOGLE_AI_API_KEY",
+          "description": "Google AI (Gemini) API key. Get one at https://aistudio.google.com/apikey",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "IMAGEN_MODEL_ID",
+          "description": "Default image model to use (e.g. gemini-3-pro-image, gemini-3.1-flash-image, imagen-4.0-ultra-generate-001).",
+          "isRequired": false,
+          "default": "gemini-3-pro-image"
+        }
+      ]
+    }
+  ]
+}
