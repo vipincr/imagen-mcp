@@ -2,6 +2,16 @@
 
 All notable changes to the Imagen MCP Server extension are documented here.
 
+## [0.2.1]
+
+### Changed
+
+- Default image model is now **`gemini-3-pro-image`** (Nano Banana Pro, GA) —
+  the stable release of Google's highest-quality image model, replacing the
+  preview default. The model picker was refreshed to the current lineup
+  (added Nano Banana 2 / `gemini-3.1-flash-image`; removed the retired
+  `gemini-2.0-flash-exp-image-generation`).
+
 ## [0.2.0]
 
 ### Changed (breaking)
